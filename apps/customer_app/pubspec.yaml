@@ -1,0 +1,56 @@
+name: customer_app
+description: Milk Delivery Customer App - Order and manage milk subscriptions.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Core package
+  milk_core:
+    path: ../../packages/milk_core
+  
+  # State management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # Navigation
+  go_router: ^13.0.0
+  
+  # UI Components
+  cached_network_image: ^3.3.1
+  flutter_svg: ^2.0.9
+  shimmer: ^3.0.0
+  
+  # Notifications
+  onesignal_flutter: ^5.1.2
+  # flutter_local_notifications: ^16.3.0  # Temporarily commented out due to AGP compatibility issues
+  
+  # Payments (UPI) - Temporarily commented out due to AGP compatibility issues
+  # upi_india: ^3.0.1
+  url_launcher: ^6.2.4
+  
+  # Utilities
+  intl: ^0.19.0
+  shared_preferences: ^2.2.2
+  
+  # Icons
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/

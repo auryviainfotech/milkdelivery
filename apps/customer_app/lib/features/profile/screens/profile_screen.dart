@@ -1,0 +1,384 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../shared/providers/auth_providers.dart';
+import 'package:milk_core/milk_core.dart';
+
+/// User profile screen
+class ProfileScreen extends ConsumerStatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  
+  void _showEditProfileDialog(UserModel? profile) {
+    final nameController = TextEditingController(text: profile?.fullName ?? '');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Full Name',
+            prefixIcon: Icon(Icons.person_outline),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty) return;
+              
+              final user = SupabaseService.currentUser;
+              print('DEBUG: user = $user, profile = $profile');
+              if (user == null || profile == null) {
+                print('DEBUG: user or profile is null, returning');
+                return;
+              }
+              
+              try {
+                final updated = UserModel(
+                  id: profile.id,
+                  phone: profile.phone,
+                  fullName: nameController.text.trim(),
+                  address: profile.address,
+                  role: profile.role,
+                  createdAt: profile.createdAt,
+                );
+                print('DEBUG: Saving profile: ${updated.toJson()}');
+                await UserRepository.saveProfile(updated);
+                print('DEBUG: Save completed successfully');
+                ref.invalidate(userProfileProvider);
+                if (mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile updated!')),
+                );
+              } catch (e, stackTrace) {
+                print('DEBUG: Save error: $e');
+                print('DEBUG: Stack trace: $stackTrace');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 5)),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditAddressDialog(UserModel? profile) {
+    final addressController = TextEditingController(text: profile?.address ?? '');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Delivery Address'),
+        content: TextField(
+          controller: addressController,
+          decoration: const InputDecoration(
+            labelText: 'Full Address',
+            prefixIcon: Icon(Icons.location_on_outlined),
+            hintText: 'e.g. Flat 101, Tower A, Palm Heights',
+          ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (addressController.text.trim().isEmpty) return;
+              
+              final user = SupabaseService.currentUser;
+              if (user == null || profile == null) return;
+              
+              try {
+                final updated = UserModel(
+                  id: profile.id,
+                  phone: profile.phone,
+                  fullName: profile.fullName,
+                  address: addressController.text.trim(),
+                  role: profile.role,
+                  createdAt: profile.createdAt,
+                );
+                await UserRepository.saveProfile(updated);
+                ref.invalidate(userProfileProvider);
+                if (mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Address updated!')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await SupabaseService.signOut();
+              if (mounted) context.go('/login');
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showComingSoonSnackbar(String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$feature coming soon!')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    final profileAsync = ref.watch(userProfileProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+        actions: [
+          IconButton(
+            onPressed: () => profileAsync.whenData((p) => _showEditProfileDialog(p)),
+            icon: const Icon(Icons.edit),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Profile header
+            Container(
+              padding: const EdgeInsets.all(24),
+              child: profileAsync.when(
+                data: (profile) => Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 48,
+                      backgroundColor: colorScheme.primaryContainer,
+                      child: Text(
+                        (profile?.fullName ?? 'U')[0].toUpperCase(),
+                        style: theme.textTheme.headlineLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      profile?.fullName ?? 'User',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      profile?.phone ?? '',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, __) => Center(child: Text('Error: $e')),
+              ),
+            ),
+
+            // Stats cards
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.local_shipping,
+                      value: '0',
+                      label: 'Deliveries',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.calendar_month,
+                      value: '0',
+                      label: 'Months',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.savings,
+                      value: '₹0',
+                      label: 'Saved',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Menu items
+            _buildMenuItem(
+              context,
+              icon: Icons.location_on_outlined,
+              title: 'Delivery Address',
+              subtitle: profileAsync.when(
+                data: (profile) => profile?.address ?? 'Not set',
+                loading: () => 'Loading...',
+                error: (_, __) => 'Error',
+              ),
+              onTap: () => profileAsync.whenData((p) => _showEditAddressDialog(p)),
+            ),
+            _buildMenuItem(
+              context,
+              icon: Icons.notifications_outlined,
+              title: 'Notifications',
+              subtitle: 'Manage notifications',
+              onTap: () => context.push('/notifications'),
+            ),
+            _buildMenuItem(
+              context,
+              icon: Icons.history,
+              title: 'Transaction History',
+              subtitle: 'View all wallet transactions',
+              onTap: () => context.push('/wallet'),
+            ),
+            _buildMenuItem(
+              context,
+              icon: Icons.help_outline,
+              title: 'Help & Support',
+              subtitle: 'FAQs, Contact us',
+              onTap: () => _showComingSoonSnackbar('Help & Support'),
+            ),
+            _buildMenuItem(
+              context,
+              icon: Icons.info_outline,
+              title: 'About',
+              subtitle: 'Version 1.0.0',
+              onTap: () => _showComingSoonSnackbar('About'),
+            ),
+            const Divider(height: 32),
+            _buildMenuItem(
+              context,
+              icon: Icons.logout,
+              title: 'Logout',
+              iconColor: colorScheme.error,
+              titleColor: colorScheme.error,
+              onTap: _showLogoutDialog,
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    BuildContext context, {
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Icon(icon, color: colorScheme.primary),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuItem(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Color? iconColor,
+    Color? titleColor,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: (iconColor ?? colorScheme.primary).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: iconColor ?? colorScheme.primary),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(color: titleColor),
+      ),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            )
+          : null,
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
+    );
+  }
+}

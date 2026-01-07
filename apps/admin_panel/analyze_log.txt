@@ -1,0 +1,5 @@
+Analyzing admin_panel...                                        
+
+warning - The value of the local variable 'theme' isn't used - lib\features\dashboard\screens\admin_dashboard_screen.dart:11:11 - unused_local_variable
+
+1 issue found. (ran in 2.9s)

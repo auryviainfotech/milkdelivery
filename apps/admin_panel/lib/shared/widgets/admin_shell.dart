@@ -1,0 +1,159 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+/// Admin panel sidebar shell for web navigation
+class AdminShell extends StatelessWidget {
+  final Widget child;
+
+  const AdminShell({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final currentLocation = GoRouterState.of(context).uri.path;
+
+    return Scaffold(
+      body: Row(
+        children: [
+          // Sidebar
+          NavigationDrawer(
+            selectedIndex: _getSelectedIndex(currentLocation),
+            onDestinationSelected: (index) => _onDestinationSelected(context, index),
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('🥛', style: TextStyle(fontSize: 24)),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Milk Delivery',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(indent: 16, endIndent: 16),
+              
+              // Navigation items
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.dashboard_outlined),
+                selectedIcon: Icon(Icons.dashboard),
+                label: Text('Dashboard'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.inventory_2_outlined),
+                selectedIcon: Icon(Icons.inventory_2),
+                label: Text('Products'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: Text('Customers'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.subscriptions_outlined),
+                selectedIcon: Icon(Icons.subscriptions),
+                label: Text('Subscriptions'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                selectedIcon: Icon(Icons.account_balance_wallet),
+                label: Text('Wallets'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.bar_chart_outlined),
+                selectedIcon: Icon(Icons.bar_chart),
+                label: Text('Reports'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.route_outlined),
+                selectedIcon: Icon(Icons.route),
+                label: Text('Routes'),
+              ),
+              
+              const Spacer(),
+              const Divider(indent: 16, endIndent: 16),
+              
+              // Logout
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: OutlinedButton.icon(
+                  onPressed: () => _logout(context),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Logout'),
+                ),
+              ),
+            ],
+          ),
+          
+          // Main content
+          Expanded(
+            child: Container(
+              color: colorScheme.surface,
+              child: child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getSelectedIndex(String location) {
+    if (location.startsWith('/dashboard')) return 0;
+    if (location.startsWith('/products')) return 1;
+    if (location.startsWith('/customers')) return 2;
+    if (location.startsWith('/subscriptions')) return 3;
+    if (location.startsWith('/wallets')) return 4;
+    if (location.startsWith('/reports')) return 5;
+    if (location.startsWith('/routes')) return 6;
+    return 0;
+  }
+
+  void _onDestinationSelected(BuildContext context, int index) {
+    final routes = [
+      '/dashboard',
+      '/products',
+      '/customers',
+      '/subscriptions',
+      '/wallets',
+      '/reports',
+      '/routes',
+    ];
+    context.go(routes[index]);
+  }
+
+  void _logout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.go('/login');
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+}
