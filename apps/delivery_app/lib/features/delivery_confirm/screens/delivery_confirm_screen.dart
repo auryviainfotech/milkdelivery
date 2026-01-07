@@ -21,7 +21,7 @@ class DeliveryConfirmScreen extends StatelessWidget {
         ),
         title: const Text('Confirm Delivery'),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -109,10 +109,10 @@ class DeliveryConfirmScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                color: colorScheme.primaryContainer.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: colorScheme.primary.withValues(alpha: 0.3),
+                  color: colorScheme.primary.withOpacity(0.3),
                 ),
               ),
               child: Column(
@@ -146,7 +146,7 @@ class DeliveryConfirmScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 32),
 
             // Action buttons
             Row(
@@ -179,6 +179,7 @@ class DeliveryConfirmScreen extends StatelessWidget {
                 child: const Text('Deliver without QR scan'),
               ),
             ),
+            const SizedBox(height: 16),
           ],
         ),
       ),

@@ -3,12 +3,13 @@ import 'package:go_router/go_router.dart';
 
 import '../features/splash/screens/splash_screen.dart';
 import '../features/auth/screens/login_screen.dart';
-import '../features/auth/screens/otp_screen.dart';
+import '../features/auth/screens/signup_screen.dart';
 import '../features/auth/screens/complete_profile_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/wallet/screens/wallet_screen.dart';
 import '../features/subscription/screens/subscription_list_screen.dart';
 import '../features/subscription/screens/subscription_detail_screen.dart';
+import '../features/subscription/screens/order_success_screen.dart';
 import '../features/orders/screens/orders_screen.dart';
 import '../features/orders/screens/order_detail_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
@@ -41,12 +42,9 @@ final appRouter = GoRouter(
       builder: (context, state) => const LoginScreen(),
     ),
     GoRoute(
-      path: '/otp',
-      name: 'otp',
-      builder: (context, state) {
-        final phone = state.extra as String? ?? '';
-        return OtpScreen(phoneNumber: phone);
-      },
+      path: '/signup',
+      name: 'signup',
+      builder: (context, state) => const SignupScreen(),
     ),
     GoRoute(
       path: '/complete-profile',
@@ -106,6 +104,14 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final id = state.pathParameters['id'] ?? '';
         return OrderDetailScreen(orderId: id);
+      },
+    ),
+    GoRoute(
+      path: '/order-success',
+      name: 'orderSuccess',
+      builder: (context, state) {
+        final details = state.extra as Map<String, dynamic>? ?? {};
+        return OrderSuccessScreen(orderDetails: details);
       },
     ),
   ],

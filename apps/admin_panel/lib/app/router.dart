@@ -4,6 +4,7 @@ import '../features/auth/screens/admin_login_screen.dart';
 import '../features/dashboard/screens/admin_dashboard_screen.dart';
 import '../features/products/screens/products_screen.dart';
 import '../features/customers/screens/customers_screen.dart';
+import '../features/delivery_persons/screens/delivery_persons_screen.dart';
 import '../features/subscriptions/screens/subscriptions_screen.dart';
 import '../features/wallets/screens/wallets_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
@@ -47,6 +48,11 @@ final adminRouter = GoRouter(
           path: '/customers',
           name: 'customers',
           builder: (context, state) => const CustomersScreen(),
+        ),
+        GoRoute(
+          path: '/delivery-persons',
+          name: 'deliveryPersons',
+          builder: (context, state) => const DeliveryPersonsScreen(),
         ),
         GoRoute(
           path: '/subscriptions',

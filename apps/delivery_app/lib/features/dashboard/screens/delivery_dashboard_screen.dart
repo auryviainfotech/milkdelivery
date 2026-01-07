@@ -27,7 +27,11 @@ class DeliveryDashboardScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('No new notifications')),
+              );
+            },
             icon: const Icon(Icons.notifications_outlined),
           ),
           IconButton(
@@ -111,7 +115,7 @@ class DeliveryDashboardScreen extends StatelessWidget {
                         Text(
                           'This Week',
                           style: TextStyle(
-                            color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                            color: colorScheme.onPrimaryContainer.withOpacity( 0.7),
                             fontSize: 12,
                           ),
                         ),

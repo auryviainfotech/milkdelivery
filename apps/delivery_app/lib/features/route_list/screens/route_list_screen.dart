@@ -1,78 +1,83 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Today's route list screen
-class RouteListScreen extends StatelessWidget {
+/// Provider for today's deliveries from Supabase
+final deliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final today = DateTime.now();
+  final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+  
+  // Fetch active subscriptions with user profiles
+  final response = await SupabaseService.client
+      .from('subscriptions')
+      .select('''
+        id,
+        product_id,
+        plan_type,
+        quantity,
+        status,
+        total_amount,
+        profiles!inner(id, full_name, phone, address)
+      ''')
+      .eq('status', 'active');
+
+  // Map product IDs to names
+  const productNames = {
+    '1': 'Full Cream Milk 500ml',
+    '2': 'Toned Milk 500ml',
+    '3': 'Double Toned Milk 500ml',
+    '4': 'Buffalo Milk 500ml',
+  };
+
+  final deliveries = (response as List).map((sub) {
+    final profile = sub['profiles'];
+    return {
+      'id': sub['id'],
+      'name': profile['full_name'] ?? 'Customer',
+      'phone': profile['phone'] ?? '',
+      'address': profile['address'] ?? 'Address not provided',
+      'product': '${productNames[sub['product_id']] ?? 'Milk'} × ${sub['quantity']}',
+      'plan': sub['plan_type'],
+      'status': 'pending',
+    };
+  }).toList();
+
+  return deliveries;
+});
+
+/// Today's route list screen - Fetches from Supabase
+class RouteListScreen extends ConsumerWidget {
   const RouteListScreen({super.key});
 
-  // Sample delivery data
-  static final List<Map<String, dynamic>> _deliveries = [
+  // Fallback dummy data if Supabase fails
+  static final List<Map<String, dynamic>> _fallbackDeliveries = [
     {
       'id': '1',
       'name': 'Rahul Sharma',
-      'address': 'House 45, Sector 45, Gurgaon',
       'phone': '+919876543210',
-      'product': 'Full Cream 500ml × 2',
-      'distance': '1.2 km',
+      'address': 'House 45, Sector 45, Gurgaon',
+      'product': 'Full Cream Milk 500ml × 2',
+      'plan': 'daily',
       'status': 'pending',
-      'lat': 28.4595,
-      'lng': 77.0266,
     },
     {
       'id': '2',
       'name': 'Priya Singh',
-      'address': 'Flat 302, DLF Phase 2, Gurgaon',
       'phone': '+919876543211',
-      'product': 'Toned Milk 1L × 1',
-      'distance': '1.8 km',
+      'address': 'Flat 302, DLF Phase 2, Gurgaon',
+      'product': 'Toned Milk 500ml × 1',
+      'plan': 'weekly',
       'status': 'pending',
-      'lat': 28.4680,
-      'lng': 77.0480,
-    },
-    {
-      'id': '3',
-      'name': 'Amit Kumar',
-      'address': 'Villa 12, Sector 56, Gurgaon',
-      'phone': '+919876543212',
-      'product': 'Buffalo Milk 500ml × 1',
-      'distance': '2.1 km',
-      'status': 'pending',
-      'lat': 28.4350,
-      'lng': 77.0650,
-    },
-    {
-      'id': '4',
-      'name': 'Sneha Gupta',
-      'address': 'Tower B, Flat 1205, Golf Course Road',
-      'phone': '+919876543213',
-      'product': 'Full Cream 500ml × 1',
-      'distance': '2.5 km',
-      'status': 'delivered',
-      'lat': 28.4450,
-      'lng': 77.0950,
-    },
-    {
-      'id': '5',
-      'name': 'Vikram Rathore',
-      'address': 'House 78, Sector 47, Gurgaon',
-      'phone': '+919876543214',
-      'product': 'Toned Milk 1L × 2',
-      'distance': '2.8 km',
-      'status': 'delivered',
-      'lat': 28.4280,
-      'lng': 77.0380,
     },
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    final pendingDeliveries = _deliveries.where((d) => d['status'] == 'pending').toList();
-    final completedDeliveries = _deliveries.where((d) => d['status'] == 'delivered').toList();
+    final deliveriesAsync = ref.watch(deliveriesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -80,322 +85,101 @@ class RouteListScreen extends StatelessWidget {
           onPressed: () => context.pop(),
           icon: const Icon(Icons.arrow_back),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Today's Deliveries"),
-            Text(
-              'Mon, 6 Jan 2025',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.pendingColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${pendingDeliveries.length} Pending',
-              style: const TextStyle(
-                color: AppTheme.pendingColor,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+        title: const Text("Today's Deliveries"),
       ),
-      body: Column(
-        children: [
-          // Summary bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            child: Row(
-              children: [
-                _buildSummaryChip(
-                  context,
-                  icon: Icons.check_circle,
-                  color: AppTheme.successColor,
-                  label: '${completedDeliveries.length} Done',
-                ),
-                const SizedBox(width: 12),
-                _buildSummaryChip(
-                  context,
-                  icon: Icons.pending,
-                  color: AppTheme.pendingColor,
-                  label: '${pendingDeliveries.length} Pending',
-                ),
-              ],
-            ),
-          ),
-
-          // Delivery list
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (pendingDeliveries.isNotEmpty) ...[
-                  Text(
-                    'Pending',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...pendingDeliveries.asMap().entries.map((entry) {
-                    return _buildDeliveryCard(context, entry.key + 1, entry.value);
-                  }),
-                  const SizedBox(height: 24),
-                ],
-                if (completedDeliveries.isNotEmpty) ...[
-                  Text(
-                    'Completed',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...completedDeliveries.map((delivery) {
-                    return _buildCompletedCard(context, delivery);
-                  }),
-                ],
-              ],
-            ),
-          ),
-
-          // Bottom stats bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: deliveriesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, __) => _buildDeliveryList(context, _fallbackDeliveries),
+        data: (deliveries) {
+          if (deliveries.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Today\'s Progress',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      Text(
-                        '${completedDeliveries.length}/${_deliveries.length} deliveries',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  Icon(Icons.local_shipping_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No deliveries for today',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Earnings',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      Text(
-                        '₹${completedDeliveries.length * 50}',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.successColor,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Check back later for new orders',
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
+            );
+          }
+          return _buildDeliveryList(context, deliveries);
+        },
       ),
     );
   }
 
-  Widget _buildSummaryChip(
-    BuildContext context, {
-    required IconData icon,
-    required Color color,
-    required String label,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDeliveryCard(BuildContext context, int index, Map<String, dynamic> delivery) {
+  Widget _buildDeliveryList(BuildContext context, List<Map<String, dynamic>> deliveries) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    
+    final pendingCount = deliveries.where((d) => d['status'] == 'pending').length;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$index',
-                      style: TextStyle(
-                        color: colorScheme.onPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
+    return Column(
+      children: [
+        // Summary bar
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: colorScheme.primaryContainer,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Column(
+                children: [
+                  Text(
+                    '${deliveries.length}',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onPrimaryContainer,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        delivery['name'],
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        delivery['address'],
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  delivery['distance'],
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                const Text('🥛', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                Text(delivery['product']),
-                const Spacer(),
-                // Call button
-                IconButton.filledTonal(
-                  onPressed: () => _makeCall(delivery['phone']),
-                  icon: const Icon(Icons.phone, size: 20),
-                ),
-                const SizedBox(width: 8),
-                // Navigate button
-                FilledButton.icon(
-                  onPressed: () => _openMaps(
-                    delivery['lat'],
-                    delivery['lng'],
-                    delivery['name'],
-                  ),
-                  icon: const Icon(Icons.navigation, size: 18),
-                  label: const Text('Navigate'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Confirm delivery button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => context.push('/delivery/${delivery['id']}'),
-                child: const Text('Confirm Delivery'),
+                  Text('Total', style: TextStyle(color: colorScheme.onPrimaryContainer)),
+                ],
               ),
-            ),
-          ],
+              Column(
+                children: [
+                  Text(
+                    '$pendingCount',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.pendingColor,
+                    ),
+                  ),
+                  const Text('Pending', style: TextStyle(color: AppTheme.pendingColor)),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-  }
 
-  Widget _buildCompletedCard(BuildContext context, Map<String, dynamic> delivery) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.successColor.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(
-            Icons.check,
-            color: AppTheme.successColor,
-            size: 20,
+        // Delivery list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: deliveries.length,
+            itemBuilder: (context, index) {
+              final delivery = deliveries[index];
+              return _DeliveryCard(
+                delivery: delivery,
+                index: index + 1,
+                onCall: () => _makeCall(delivery['phone']),
+                onNavigate: () => _openMaps(delivery['address']),
+                onConfirm: () => context.push('/delivery/${delivery['id']}'),
+              );
+            },
           ),
         ),
-        title: Text(
-          delivery['name'],
-          style: TextStyle(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        subtitle: Text(
-          '🥛 ${delivery['product']}',
-          style: TextStyle(color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
-        ),
-        trailing: const Text(
-          'Delivered',
-          style: TextStyle(
-            color: AppTheme.successColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
+      ],
     );
   }
 
@@ -406,12 +190,148 @@ class RouteListScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _openMaps(double lat, double lng, String label) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-    );
+  Future<void> _openMaps(String address) async {
+    final encodedAddress = Uri.encodeComponent(address);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+}
+
+/// Delivery Card widget
+class _DeliveryCard extends StatelessWidget {
+  final Map<String, dynamic> delivery;
+  final int index;
+  final VoidCallback onCall;
+  final VoidCallback onNavigate;
+  final VoidCallback onConfirm;
+
+  const _DeliveryCard({
+    required this.delivery,
+    required this.index,
+    required this.onCall,
+    required this.onNavigate,
+    required this.onConfirm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with index and name
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: colorScheme.primary,
+                  radius: 16,
+                  child: Text(
+                    '$index',
+                    style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        delivery['name'],
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        delivery['phone'],
+                        style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                // Plan badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    delivery['plan']?.toString().toUpperCase() ?? 'DAILY',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSecondaryContainer,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+
+            // Address
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.location_on, color: colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    delivery['address'],
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Product
+            Row(
+              children: [
+                const Text('🥛', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    delivery['product'],
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Action buttons
+            Row(
+              children: [
+                IconButton.filledTonal(
+                  onPressed: onCall,
+                  icon: const Icon(Icons.phone),
+                  tooltip: 'Call',
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onNavigate,
+                    icon: const Icon(Icons.navigation, size: 18),
+                    label: const Text('Navigate'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onConfirm,
+                    child: const Text('Confirm'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

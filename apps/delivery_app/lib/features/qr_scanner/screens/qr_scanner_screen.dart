@@ -131,7 +131,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           // Overlay
           Container(
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.5),
+              color: Colors.black.withOpacity( 0.5),
             ),
           ),
 

@@ -63,6 +63,11 @@ class AdminShell extends StatelessWidget {
                 label: Text('Customers'),
               ),
               const NavigationDrawerDestination(
+                icon: Icon(Icons.delivery_dining_outlined),
+                selectedIcon: Icon(Icons.delivery_dining),
+                label: Text('Delivery Persons'),
+              ),
+              const NavigationDrawerDestination(
                 icon: Icon(Icons.subscriptions_outlined),
                 selectedIcon: Icon(Icons.subscriptions),
                 label: Text('Subscriptions'),
@@ -83,7 +88,7 @@ class AdminShell extends StatelessWidget {
                 label: Text('Routes'),
               ),
               
-              const Spacer(),
+              const SizedBox(height: 40),
               const Divider(indent: 16, endIndent: 16),
               
               // Logout
@@ -114,10 +119,11 @@ class AdminShell extends StatelessWidget {
     if (location.startsWith('/dashboard')) return 0;
     if (location.startsWith('/products')) return 1;
     if (location.startsWith('/customers')) return 2;
-    if (location.startsWith('/subscriptions')) return 3;
-    if (location.startsWith('/wallets')) return 4;
-    if (location.startsWith('/reports')) return 5;
-    if (location.startsWith('/routes')) return 6;
+    if (location.startsWith('/delivery-persons')) return 3;
+    if (location.startsWith('/subscriptions')) return 4;
+    if (location.startsWith('/wallets')) return 5;
+    if (location.startsWith('/reports')) return 6;
+    if (location.startsWith('/routes')) return 7;
     return 0;
   }
 
@@ -126,6 +132,7 @@ class AdminShell extends StatelessWidget {
       '/dashboard',
       '/products',
       '/customers',
+      '/delivery-persons',
       '/subscriptions',
       '/wallets',
       '/reports',

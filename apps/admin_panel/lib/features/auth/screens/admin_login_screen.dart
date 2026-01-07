@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:milk_core/milk_core.dart';
 
 /// Admin Login Screen
 class AdminLoginScreen extends StatefulWidget {
@@ -23,17 +24,49 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     super.dispose();
   }
 
+  // Fixed admin email - only this email can login
+  static const String _adminEmail = 'mdt01569@gmail.com';
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check if email matches admin email
+    if (_emailController.text.trim().toLowerCase() != _adminEmail.toLowerCase()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access denied. Only admin can login.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
-    // Simulate login - TODO: Replace with actual Supabase admin auth
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Authenticate with Supabase
+      final response = await SupabaseService.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
-      context.go('/dashboard');
+      if (response.user != null && mounted) {
+        context.go('/dashboard');
+      }
+    } catch (e) {
+      if (mounted) {
+        String errorMsg = 'Login failed';
+        if (e.toString().contains('Invalid login credentials')) {
+          errorMsg = 'Wrong password. Please try again.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -67,7 +100,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       Text(
                         'Admin Panel',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                          color: colorScheme.onPrimaryContainer.withOpacity(0.7),
                         ),
                       ),
                     ],

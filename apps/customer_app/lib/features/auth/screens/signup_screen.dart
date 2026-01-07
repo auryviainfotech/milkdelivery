@@ -3,50 +3,64 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 
-/// Customer login screen with phone + password
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+/// Customer signup screen with name + phone + password
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignupScreenState extends State<SignupScreen> {
+  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
+    _nameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _handleLogin() async {
+  void _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // Login with email (using phone as email format for Supabase)
+      // Create account with email (using phone as email format for Supabase)
       final email = '${_phoneController.text.trim()}@milkdelivery.app';
       
-      final response = await SupabaseService.client.auth.signInWithPassword(
+      final response = await SupabaseService.client.auth.signUp(
         email: email,
         password: _passwordController.text,
       );
 
       if (response.user != null && mounted) {
-        // Check if profile exists
-        final profileExists = await UserRepository.profileExists(response.user!.id);
+        // Create user profile
+        final profile = UserModel(
+          id: response.user!.id,
+          phone: '+91${_phoneController.text.trim()}',
+          fullName: _nameController.text.trim(),
+          role: UserRole.customer,
+          createdAt: DateTime.now(),
+        );
         
-        if (profileExists) {
+        await UserRepository.saveProfile(profile);
+        
+        // Create wallet for the user
+        await WalletRepository.createWallet(response.user!.id);
+        
+        if (mounted) {
           context.go('/dashboard');
-        } else {
-          context.go('/complete-profile');
         }
       }
     } catch (e) {
@@ -66,12 +80,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String _getErrorMessage(String error) {
-    if (error.contains('Invalid login credentials')) {
-      return 'Wrong phone number or password';
-    } else if (error.contains('Email not confirmed')) {
-      return 'Please verify your account first';
+    if (error.contains('User already registered')) {
+      return 'This phone number is already registered. Please login.';
+    } else if (error.contains('weak_password')) {
+      return 'Password is too weak. Use at least 6 characters.';
     }
-    return 'Login failed. Please try again.';
+    return 'Signup failed. Please try again.';
   }
 
   @override
@@ -80,6 +94,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          onPressed: () => context.pop(),
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -88,41 +108,41 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 40),
-
-                // Logo
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
-                    shape: BoxShape.circle,
+                // Title
+                Text(
+                  'Create Account',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  child: const Center(
-                    child: Text('🥛', style: TextStyle(fontSize: 48)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Join us for fresh milk delivery',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 32),
 
-                // Title
-                Text(
-                  'Welcome Back!',
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                // Full Name
+                TextFormField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    hintText: 'Enter your full name',
+                    prefixIcon: Icon(Icons.person_outline),
                   ),
-                  textAlign: TextAlign.center,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your name';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Login to continue',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 16),
 
-                // Phone number input
+                // Phone number
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
@@ -159,15 +179,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
-                // Password input
+                // Password
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    hintText: 'Enter your password',
+                    hintText: 'Create a password',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -180,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your password';
+                      return 'Please enter a password';
                     }
                     if (value.length < 6) {
                       return 'Password must be at least 6 characters';
@@ -188,32 +208,61 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 16),
+
+                // Confirm Password
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password',
+                    hintText: 'Re-enter your password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                      },
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please confirm your password';
+                    }
+                    if (value != _passwordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  },
+                ),
                 const SizedBox(height: 32),
 
-                // Login button
+                // Signup button
                 FilledButton(
-                  onPressed: _isLoading ? null : _handleLogin,
+                  onPressed: _isLoading ? null : _handleSignup,
                   child: _isLoading
                       ? const SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Login'),
+                      : const Text('Create Account'),
                 ),
                 const SizedBox(height: 24),
 
-                // Signup link
+                // Login link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      "Don't have an account? ",
+                      'Already have an account? ',
                       style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                     TextButton(
-                      onPressed: () => context.push('/signup'),
-                      child: const Text('Sign Up'),
+                      onPressed: () => context.pop(),
+                      child: const Text('Login'),
                     ),
                   ],
                 ),
