@@ -23,14 +23,18 @@ class UserRepository {
   }
 
   /// Create or update user profile
-  static Future<UserModel> saveProfile(UserModel user) async {
-    final response = await SupabaseService.client
-        .from(_tableName)
-        .upsert(user.toJson())
-        .select()
-        .single();
-
-    return UserModel.fromJson(response);
+  static Future<void> saveProfile(UserModel user) async {
+    // Manually map to snake_case for Supabase
+    await SupabaseService.client.from(_tableName).upsert({
+      'id': user.id,
+      'phone': user.phone,
+      'full_name': user.fullName,
+      'address': user.address,
+      'latitude': user.latitude,
+      'longitude': user.longitude,
+      'role': user.role.name,
+      'created_at': user.createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+    });
   }
 
   /// Check if profile exists for user

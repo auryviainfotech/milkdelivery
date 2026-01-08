@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
-import '../../../services/upi_payment_service.dart';
+import '../../../services/razorpay_service.dart';
 
-/// Wallet screen with balance and UPI payments
+/// Wallet screen with balance and Razorpay payments
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
 
@@ -16,15 +16,99 @@ class WalletScreen extends ConsumerStatefulWidget {
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   final _customAmountController = TextEditingController();
   bool _isLoading = false;
+  double _pendingAmount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _initRazorpay();
+  }
+
+  void _initRazorpay() {
+    RazorpayService.init(
+      onSuccess: _handlePaymentSuccess,
+      onError: _handlePaymentError,
+    );
+  }
 
   @override
   void dispose() {
     _customAmountController.dispose();
+    RazorpayService.dispose();
     super.dispose();
   }
 
-  // Open UPI app
-  Future<void> _payWithUpi(double amount, String appType) async {
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    // Add money to wallet after successful payment
+    if (mounted) {
+      setState(() => _isLoading = false);
+      ref.invalidate(walletProvider);
+      
+      // Show success dialog
+      _showSuccessDialog(_pendingAmount, response.paymentId ?? 'N/A');
+    }
+    _pendingAmount = 0;
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (mounted) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: ${response.message ?? "Unknown error"}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+    _pendingAmount = 0;
+  }
+
+  void _showSuccessDialog(double amount, String paymentId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.check_circle, color: Colors.green, size: 64),
+        title: const Text('Money Added!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '₹${amount.toStringAsFixed(0)}',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  const Text('✅ Added to Wallet', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('Payment ID: $paymentId', style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Open Razorpay checkout
+  Future<void> _payWithRazorpay(double amount) async {
     if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid amount')),
@@ -33,40 +117,31 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     }
 
     setState(() => _isLoading = true);
+    _pendingAmount = amount;
     
     try {
-      final success = await UpiPaymentService.initiatePayment(
-        amount: amount,
-        transactionId: UpiPaymentService.generateTransactionId(),
-        preferredApp: appType,
-      );
+      final user = SupabaseService.currentUser;
+      final profile = await SupabaseService.client
+          .from('profiles')
+          .select('full_name, phone')
+          .eq('id', user?.id ?? '')
+          .maybeSingle();
       
-      if (success) {
-        // For demo: Add money after launching (in real app, you'd verify payment via backend)
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          ref.invalidate(walletProvider);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('₹${amount.toStringAsFixed(0)} added successfully!')),
-          );
-          Navigator.pop(context); // Close bottom sheet
-        }
-      } else {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open payment app. Make sure it is installed.')),
-          );
-        }
-      }
+      Navigator.pop(context); // Close bottom sheet
+      
+      RazorpayService.openCheckout(
+        amount: amount,
+        orderId: 'WALLET${DateTime.now().millisecondsSinceEpoch}',
+        description: 'Wallet Recharge',
+        email: user?.email ?? 'customer@milkdelivery.com',
+        phone: profile?['phone']?.toString().replaceAll('+91', '') ?? '',
+        name: profile?['full_name'] ?? '',
+      );
     } catch (e) {
+      setState(() => _isLoading = false);
       if (mounted) {
-        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment failed: $e')),
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
@@ -81,95 +156,97 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       ),
       builder: (context) => Padding(
         padding: const EdgeInsets.all(24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Pay ₹${amount.toStringAsFixed(0)}',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add ₹${amount.toStringAsFixed(0)} to Wallet',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Pay securely with Razorpay',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
+            
+            // All payment options via Razorpay
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Choose payment method',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 24),
-              
-              // Google Pay
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildPaymentIcon('G', 'GPay'),
+                      _buildPaymentIcon('P', 'PhonePe'),
+                      _buildPaymentIcon('₿', 'Paytm'),
+                      _buildPaymentIcon('💳', 'Cards'),
+                    ],
                   ),
-                  child: const Text('G', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-                ),
-                title: const Text('Google Pay'),
-                subtitle: const Text('Recommended'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _payWithUpi(amount, 'gpay'),
-              ),
-              
-              const Divider(),
-              
-              // PhonePe
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _isLoading ? null : () => _payWithRazorpay(amount),
+                      icon: _isLoading 
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.payment),
+                      label: Text(_isLoading ? 'Processing...' : 'Pay ₹${amount.toStringAsFixed(0)}'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
                   ),
-                  child: Icon(Icons.phone_android, color: Colors.purple.shade700),
-                ),
-                title: const Text('PhonePe'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _payWithUpi(amount, 'phonepe'),
+                ],
               ),
-              
-              const Divider(),
-              
-              // Paytm
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    borderRadius: BorderRadius.circular(8),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Security note
+            Row(
+              children: [
+                Icon(Icons.verified_user, color: Colors.green.shade700, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Secured by Razorpay • UPI, Cards, Net Banking',
+                    style: TextStyle(color: Colors.green.shade700, fontSize: 12),
                   ),
-                  child: Icon(Icons.payment, color: Colors.blue.shade700),
                 ),
-                title: const Text('Paytm'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _payWithUpi(amount, 'paytm'),
-              ),
-              
-              const Divider(),
-              
-              // Other UPI
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.more_horiz),
-                ),
-                title: const Text('Other UPI Apps'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _payWithUpi(amount, 'generic'),
-              ),
-              
-              const SizedBox(height: 16),
-            ],
-          ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPaymentIcon(String icon, String label) {
+    return Column(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(icon, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
     );
   }
 
@@ -248,35 +325,38 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     children: [
                       Text('Custom Amount', style: theme.textTheme.titleSmall),
                       const SizedBox(height: 8),
-                      TextField(
-                        controller: _customAmountController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          prefixText: '₹ ',
-                          hintText: 'Enter amount',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: TextButton(
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _customAmountController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                prefixText: '₹ ',
+                                hintText: 'Enter amount',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton(
                             onPressed: () {
-                              final amount = double.tryParse(_customAmountController.text);
-                              if (amount != null && amount > 0) {
+                              final amount = double.tryParse(_customAmountController.text) ?? 0;
+                              if (amount > 0) {
                                 _showPaymentOptions(amount);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Enter a valid amount')),
-                                );
                               }
                             },
-                            child: const Text('Pay'),
+                            child: const Text('Add'),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // UPI info banner
+              // Security info
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -290,7 +370,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Secure UPI payments via Google Pay, PhonePe & more',
+                        'Secure payments via Razorpay - UPI, Cards, Net Banking',
                         style: TextStyle(color: Colors.green.shade700, fontSize: 13),
                       ),
                     ),
@@ -324,31 +404,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               ),
             ],
           ),
-    );
-  }
-
-  Widget _buildTransaction(BuildContext context, IconData icon, Color color, String title, String amount, String date) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerLow,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(title),
-        subtitle: Text(date),
-        trailing: Text(
-          amount,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-      ),
     );
   }
 }

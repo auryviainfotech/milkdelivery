@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 
-/// Screen to collect user name and general area after first login
+/// Screen to collect user name and mobile number after signup
 class CompleteProfileScreen extends StatefulWidget {
   const CompleteProfileScreen({super.key});
 
@@ -13,13 +14,13 @@ class CompleteProfileScreen extends StatefulWidget {
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _areaController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _areaController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -32,17 +33,23 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       final user = SupabaseService.currentUser;
       if (user == null) throw Exception('No user found');
 
-      final profile = UserModel(
-        id: user.id,
-        phone: user.phone ?? '',
-        fullName: _nameController.text.trim(),
-        address: _areaController.text.trim(), // Storing area in address for now
-        role: UserRole.customer,
-        createdAt: DateTime.now(),
-      );
+      // Create/update profile with name and phone (sanitized)
+      final sanitizedName = InputSanitizer.sanitizeName(_nameController.text);
+      final sanitizedPhone = InputSanitizer.sanitizePhone(_phoneController.text);
+      
+      await SupabaseService.client.from('profiles').upsert({
+        'id': user.id,
+        'full_name': sanitizedName,
+        'phone': '+91$sanitizedPhone',
+        'role': 'customer',
+        'created_at': DateTime.now().toIso8601String(),
+      });
 
-      await UserRepository.saveProfile(profile);
-      await WalletRepository.createWallet(user.id);
+      // Create wallet
+      await SupabaseService.client.from('wallets').upsert({
+        'user_id': user.id,
+        'balance': 0.0,
+      });
 
       if (mounted) {
         context.go('/dashboard');
@@ -60,6 +67,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     
     return Scaffold(
       appBar: AppBar(
@@ -74,14 +82,28 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Welcome Icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text('🥛', style: TextStyle(fontSize: 40)),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
                 Text(
-                  'Welcome to Milk Delivery! 🥛',
+                  'Almost There! 🎉',
                   style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Tell us a bit about yourself to get started',
+                  'Just a few details to complete your profile',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey),
                 ),
@@ -94,28 +116,44 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     labelText: 'Full Name',
                     prefixIcon: Icon(Icons.person_outline),
                     hintText: 'Enter your name',
+                    border: OutlineInputBorder(),
                   ),
+                  textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
                   validator: (value) => 
-                      (value == null || value.isEmpty) ? 'Please enter your name' : null,
+                      (value == null || value.trim().isEmpty) ? 'Please enter your name' : null,
                 ),
                 const SizedBox(height: 20),
 
-                // Area/Society Field
+                // Phone Number Field
                 TextFormField(
-                  controller: _areaController,
+                  controller: _phoneController,
                   decoration: const InputDecoration(
-                    labelText: 'Area / Society',
-                    prefixIcon: Icon(Icons.location_city_outlined),
-                    hintText: 'e.g. Sector 45 or Palm Heights',
+                    labelText: 'Mobile Number',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                    prefixText: '+91 ',
+                    hintText: '9876543210',
+                    border: OutlineInputBorder(),
                   ),
-                  validator: (value) => 
-                      (value == null || value.isEmpty) ? 'Please enter your area' : null,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your mobile number';
+                    }
+                    if (value.length != 10) {
+                      return 'Mobile number must be 10 digits';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'We will ask for your full door-to-door address when you place your first order.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                const SizedBox(height: 8),
+                Text(
+                  'Your mobile number will be used for delivery updates',
+                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
                 ),
                 const SizedBox(height: 48),
 
@@ -123,7 +161,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   onPressed: _isLoading ? null : _handleSave,
                   child: _isLoading 
                     ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Get Started'),
+                    : const Text('Complete Setup'),
                 ),
               ],
             ),

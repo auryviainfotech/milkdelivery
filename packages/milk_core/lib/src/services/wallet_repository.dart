@@ -19,7 +19,7 @@ class WalletRepository {
       // Create wallet if it doesn't exist
       return await createWallet(userId);
     }
-    return WalletModel.fromJson(response);
+    return _mapToWalletModel(response);
   }
 
   /// Create a new wallet
@@ -33,7 +33,19 @@ class WalletRepository {
         .select()
         .single();
 
-    return WalletModel.fromJson(response);
+    return _mapToWalletModel(response);
+  }
+
+  /// Map Supabase snake_case response to WalletModel (camelCase)
+  static WalletModel _mapToWalletModel(Map<String, dynamic> json) {
+    return WalletModel(
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      balance: (json['balance'] as num?)?.toDouble() ?? 0.0,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
+          : null,
+    );
   }
 
   /// Get recent transactions

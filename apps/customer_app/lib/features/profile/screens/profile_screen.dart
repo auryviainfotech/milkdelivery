@@ -299,6 +299,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const Divider(height: 32),
             _buildMenuItem(
               context,
+              icon: Icons.lock_outline,
+              title: 'Change Password',
+              onTap: _showChangePasswordDialog,
+            ),
+            _buildMenuItem(
+              context,
               icon: Icons.logout,
               title: 'Logout',
               iconColor: colorScheme.error,
@@ -306,6 +312,98 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onTap: _showLogoutDialog,
             ),
             const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final passwordController = TextEditingController();
+    final confirmController = TextEditingController();
+    bool obscurePassword = true;
+    bool obscureConfirm = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Change Password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: passwordController,
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => obscurePassword = !obscurePassword),
+                  ),
+                ),
+                obscureText: obscurePassword,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: confirmController,
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => obscureConfirm = !obscureConfirm),
+                  ),
+                ),
+                obscureText: obscureConfirm,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final password = passwordController.text;
+                final confirm = confirmController.text;
+
+                if (password.length < 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Password must be at least 6 characters')),
+                  );
+                  return;
+                }
+
+                if (password != confirm) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Passwords do not match')),
+                  );
+                  return;
+                }
+
+                try {
+                  await SupabaseService.client.auth.updateUser(
+                    UserAttributes(password: password),
+                  );
+                  
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Password updated successfully')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Update'),
+            ),
           ],
         ),
       ),

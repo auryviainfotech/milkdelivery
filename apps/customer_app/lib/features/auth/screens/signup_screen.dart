@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Customer signup screen with name + phone + password
+/// Customer signup screen with email/password
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -12,8 +12,7 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -23,69 +22,56 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _handleSignup() async {
+  Future<void> _handleEmailSignup() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // Create account with email (using phone as email format for Supabase)
-      final email = '${_phoneController.text.trim()}@milkdelivery.app';
-      
       final response = await SupabaseService.client.auth.signUp(
-        email: email,
+        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
       if (response.user != null && mounted) {
-        // Create user profile
-        final profile = UserModel(
-          id: response.user!.id,
-          phone: '+91${_phoneController.text.trim()}',
-          fullName: _nameController.text.trim(),
-          role: UserRole.customer,
-          createdAt: DateTime.now(),
-        );
-        
-        await UserRepository.saveProfile(profile);
-        
-        // Create wallet for the user
-        await WalletRepository.createWallet(response.user!.id);
-        
-        if (mounted) {
-          context.go('/dashboard');
-        }
+        // Go to complete profile to collect name and phone
+        context.go('/complete-profile');
       }
-    } catch (e) {
+    } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_getErrorMessage(e.toString())),
+            content: Text(_getErrorMessage(e.message)),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } finally {
+    } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   String _getErrorMessage(String error) {
     if (error.contains('User already registered')) {
-      return 'This phone number is already registered. Please login.';
-    } else if (error.contains('weak_password')) {
+      return 'Email already registered. Try signing in.';
+    } else if (error.contains('Invalid email')) {
+      return 'Please enter a valid email address';
+    } else if (error.contains('weak password')) {
       return 'Password is too weak. Use at least 6 characters.';
     }
-    return 'Signup failed. Please try again.';
+    return error;
   }
 
   @override
@@ -96,8 +82,8 @@ class _SignupScreenState extends State<SignupScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          onPressed: () => context.pop(),
           icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -108,87 +94,69 @@ class _SignupScreenState extends State<SignupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Logo
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Text('🥛', style: TextStyle(fontSize: 40)),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
                 // Title
                 Text(
                   'Create Account',
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Join us for fresh milk delivery',
+                  'Sign up for fresh milk delivery',
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 40),
 
-                // Full Name
+                // Email input
                 TextFormField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                    hintText: 'Enter your full name',
-                    prefixIcon: Icon(Icons.person_outline),
+                    labelText: 'Email',
+                    hintText: 'you@example.com',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your name';
+                      return 'Please enter your email';
+                    }
+                    if (!value.contains('@') || !value.contains('.')) {
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Phone number
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Mobile Number',
-                    hintText: '9876543210',
-                    prefixIcon: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('🇮🇳 +91', style: theme.textTheme.bodyLarge),
-                          const SizedBox(width: 8),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            color: colorScheme.outline,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your phone number';
-                    }
-                    if (value.length != 10) {
-                      return 'Phone number must be 10 digits';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Password
+                // Password input
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    hintText: 'Create a password',
+                    hintText: 'At least 6 characters',
                     prefixIcon: const Icon(Icons.lock_outline),
+                    border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -210,7 +178,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Confirm Password
+                // Confirm Password input
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirmPassword,
@@ -218,6 +186,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     labelText: 'Confirm Password',
                     hintText: 'Re-enter your password',
                     prefixIcon: const Icon(Icons.lock_outline),
+                    border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
@@ -241,14 +210,17 @@ class _SignupScreenState extends State<SignupScreen> {
 
                 // Signup button
                 FilledButton(
-                  onPressed: _isLoading ? null : _handleSignup,
+                  onPressed: _isLoading ? null : _handleEmailSignup,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                   child: _isLoading
                       ? const SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Create Account'),
+                      : const Text('Create Account', style: TextStyle(fontSize: 16)),
                 ),
                 const SizedBox(height: 24),
 
@@ -262,7 +234,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     TextButton(
                       onPressed: () => context.pop(),
-                      child: const Text('Login'),
+                      child: const Text('Sign In'),
                     ),
                   ],
                 ),

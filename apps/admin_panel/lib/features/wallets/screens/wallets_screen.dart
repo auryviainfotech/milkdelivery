@@ -1,250 +1,267 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:intl/intl.dart';
 
-/// Wallets Management Screen
-class WalletsScreen extends StatefulWidget {
+/// Provider for wallet transactions from Supabase
+final walletsDataProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  // Get all wallets with user info
+  final wallets = await SupabaseService.client
+      .from('wallets')
+      .select('*, profiles!wallets_user_id_fkey(full_name, phone)')
+      .order('updated_at', ascending: false);
+  
+  // Get recent transactions
+  final transactions = await SupabaseService.client
+      .from('wallet_transactions')
+      .select('*, wallets!wallet_transactions_wallet_id_fkey(user_id, profiles!wallets_user_id_fkey(full_name))')
+      .order('created_at', ascending: false)
+      .limit(50);
+  
+  return {
+    'wallets': List<Map<String, dynamic>>.from(wallets),
+    'transactions': List<Map<String, dynamic>>.from(transactions),
+  };
+});
+
+/// Wallets Management Screen with Real Data
+class WalletsScreen extends ConsumerStatefulWidget {
   const WalletsScreen({super.key});
 
   @override
-  State<WalletsScreen> createState() => _WalletsScreenState();
+  ConsumerState<WalletsScreen> createState() => _WalletsScreenState();
 }
 
-class _WalletsScreenState extends State<WalletsScreen> {
-  final _searchController = TextEditingController();
+class _WalletsScreenState extends ConsumerState<WalletsScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
 
-  final List<Map<String, dynamic>> _transactions = [
-    {'id': '1', 'customer': 'Rahul Sharma', 'type': 'credit', 'amount': 500.0, 'reason': 'UPI Recharge', 'paymentId': 'upi_123456', 'date': '2024-01-15 10:30'},
-    {'id': '2', 'customer': 'Rahul Sharma', 'type': 'debit', 'amount': 50.0, 'reason': 'Daily subscription', 'paymentId': null, 'date': '2024-01-15 06:00'},
-    {'id': '3', 'customer': 'Priya Singh', 'type': 'credit', 'amount': 1000.0, 'reason': 'UPI Recharge', 'paymentId': 'upi_234567', 'date': '2024-01-14 15:45'},
-    {'id': '4', 'customer': 'Amit Kumar', 'type': 'debit', 'amount': 70.0, 'reason': 'Weekly subscription', 'paymentId': null, 'date': '2024-01-14 06:00'},
-    {'id': '5', 'customer': 'Vikram Patel', 'type': 'credit', 'amount': 200.0, 'reason': 'Admin credit', 'paymentId': 'admin_123', 'date': '2024-01-13 12:00'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
-    // Calculate stats
-    final totalCredits = _transactions
-        .where((t) => t['type'] == 'credit')
-        .fold(0.0, (sum, t) => sum + t['amount']);
-    final totalDebits = _transactions
-        .where((t) => t['type'] == 'debit')
-        .fold(0.0, (sum, t) => sum + t['amount']);
+    final walletsAsync = ref.watch(walletsDataProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Wallets & Transactions'),
         actions: [
-          SizedBox(
-            width: 300,
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search transactions...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                isDense: true,
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          FilledButton.icon(
-            onPressed: _addManualCredit,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Credit'),
+          IconButton(
+            onPressed: () => ref.invalidate(walletsDataProvider),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
           ),
           const SizedBox(width: 16),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'All Wallets'),
+            Tab(text: 'Transactions'),
+          ],
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // Stats row
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatsCard(
-                    context,
-                    icon: Icons.arrow_upward,
-                    label: 'Total Credits',
-                    value: '₹${totalCredits.toStringAsFixed(0)}',
-                    color: AppTheme.successColor,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatsCard(
-                    context,
-                    icon: Icons.arrow_downward,
-                    label: 'Total Debits',
-                    value: '₹${totalDebits.toStringAsFixed(0)}',
-                    color: AppTheme.errorColor,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildStatsCard(
-                    context,
-                    icon: Icons.account_balance_wallet,
-                    label: 'Net Balance',
-                    value: '₹${(totalCredits - totalDebits).toStringAsFixed(0)}',
-                    color: colorScheme.primary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+      body: walletsAsync.when(
+        data: (data) {
+          final wallets = data['wallets'] as List<Map<String, dynamic>>;
+          final transactions = data['transactions'] as List<Map<String, dynamic>>;
+          
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildWalletsTab(wallets, colorScheme),
+              _buildTransactionsTab(transactions, colorScheme),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+      ),
+    );
+  }
 
-            // Transactions table
-            Expanded(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recent Transactions',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+  Widget _buildWalletsTab(List<Map<String, dynamic>> wallets, ColorScheme colorScheme) {
+    if (wallets.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.account_balance_wallet_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text('No wallets found', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+          ],
+        ),
+      );
+    }
+    
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: DataTable2(
+            columnSpacing: 12,
+            horizontalMargin: 12,
+            minWidth: 600,
+            columns: const [
+              DataColumn2(label: Text('Customer'), size: ColumnSize.L),
+              DataColumn2(label: Text('Balance'), size: ColumnSize.M),
+              DataColumn2(label: Text('Last Updated'), size: ColumnSize.M),
+              DataColumn2(label: Text('Actions'), size: ColumnSize.S),
+            ],
+            rows: wallets.map((wallet) {
+              final profile = wallet['profiles'] as Map<String, dynamic>?;
+              final balance = (wallet['balance'] as num?)?.toDouble() ?? 0;
+              final updatedAt = wallet['updated_at'] != null 
+                  ? DateFormat('dd MMM yyyy, HH:mm').format(DateTime.parse(wallet['updated_at']))
+                  : '-';
+              
+              return DataRow2(
+                cells: [
+                  DataCell(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(profile?['full_name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w500)),
+                        Text(profile?['phone'] ?? '-', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '₹${balance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: balance > 0 ? AppTheme.successColor : colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  DataCell(Text(updatedAt)),
+                  DataCell(
+                    IconButton(
+                      onPressed: () => _showAddBalanceDialog(wallet),
+                      icon: const Icon(Icons.add_circle_outline),
+                      tooltip: 'Add Balance',
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionsTab(List<Map<String, dynamic>> transactions, ColorScheme colorScheme) {
+    if (transactions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.receipt_long_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text('No transactions found', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+          ],
+        ),
+      );
+    }
+    
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: DataTable2(
+            columnSpacing: 12,
+            horizontalMargin: 12,
+            minWidth: 700,
+            columns: const [
+              DataColumn2(label: Text('Date'), size: ColumnSize.M),
+              DataColumn2(label: Text('Customer'), size: ColumnSize.L),
+              DataColumn2(label: Text('Type'), size: ColumnSize.S),
+              DataColumn2(label: Text('Amount'), size: ColumnSize.S),
+              DataColumn2(label: Text('Reason'), size: ColumnSize.L),
+            ],
+            rows: transactions.map((tx) {
+              final isCredit = tx['type'] == 'credit';
+              final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
+              final createdAt = tx['created_at'] != null 
+                  ? DateFormat('dd MMM, HH:mm').format(DateTime.parse(tx['created_at']))
+                  : '-';
+              
+              // Get customer name from nested data
+              String customerName = 'Unknown';
+              final walletData = tx['wallets'] as Map<String, dynamic>?;
+              if (walletData != null) {
+                final profileData = walletData['profiles'] as Map<String, dynamic>?;
+                customerName = profileData?['full_name'] ?? 'Unknown';
+              }
+              
+              return DataRow2(
+                cells: [
+                  DataCell(Text(createdAt)),
+                  DataCell(Text(customerName)),
+                  DataCell(
+                    Chip(
+                      label: Text(
+                        isCredit ? 'CREDIT' : 'DEBIT',
+                        style: TextStyle(
+                          color: isCredit ? AppTheme.successColor : AppTheme.errorColor,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Expanded(
-                        child: DataTable2(
-                          columnSpacing: 12,
-                          horizontalMargin: 12,
-                          minWidth: 800,
-                          columns: const [
-                            DataColumn2(label: Text('Customer'), size: ColumnSize.M),
-                            DataColumn2(label: Text('Type'), size: ColumnSize.S),
-                            DataColumn2(label: Text('Amount'), size: ColumnSize.S),
-                            DataColumn2(label: Text('Reason'), size: ColumnSize.L),
-                            DataColumn2(label: Text('Payment ID'), size: ColumnSize.M),
-                            DataColumn2(label: Text('Date'), size: ColumnSize.M),
-                          ],
-                          rows: _transactions.map((txn) {
-                            final isCredit = txn['type'] == 'credit';
-                            
-                            return DataRow2(
-                              cells: [
-                                DataCell(Text(txn['customer'], style: const TextStyle(fontWeight: FontWeight.w500))),
-                                DataCell(
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: (isCredit ? AppTheme.successColor : AppTheme.errorColor).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          isCredit ? Icons.add : Icons.remove,
-                                          size: 14,
-                                          color: isCredit ? AppTheme.successColor : AppTheme.errorColor,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          isCredit ? 'Credit' : 'Debit',
-                                          style: TextStyle(
-                                            color: isCredit ? AppTheme.successColor : AppTheme.errorColor,
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    '${isCredit ? '+' : '-'}₹${txn['amount'].toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                      color: isCredit ? AppTheme.successColor : AppTheme.errorColor,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(Text(txn['reason'])),
-                                DataCell(Text(txn['paymentId'] ?? '-')),
-                                DataCell(Text(txn['date'])),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
+                      backgroundColor: (isCredit ? AppTheme.successColor : AppTheme.errorColor).withOpacity(0.1),
+                      side: BorderSide.none,
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ],
+                  DataCell(
+                    Text(
+                      '${isCredit ? '+' : '-'}₹${amount.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isCredit ? AppTheme.successColor : AppTheme.errorColor,
+                      ),
+                    ),
+                  ),
+                  DataCell(Text(tx['reason'] ?? '-')),
+                ],
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildStatsCard(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _addManualCredit() {
-    final customerController = TextEditingController();
+  void _showAddBalanceDialog(Map<String, dynamic> wallet) {
     final amountController = TextEditingController();
     final reasonController = TextEditingController();
+    final profile = wallet['profiles'] as Map<String, dynamic>?;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add Manual Credit'),
+        title: Text('Add Balance - ${profile?['full_name'] ?? 'Customer'}'),
         content: SizedBox(
-          width: 400,
+          width: 300,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: customerController,
-                decoration: const InputDecoration(
-                  labelText: 'Customer Name/Phone',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
@@ -260,7 +277,7 @@ class _WalletsScreenState extends State<WalletsScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Reason',
                   border: OutlineInputBorder(),
-                  hintText: 'e.g., Refund, Bonus',
+                  hintText: 'e.g., Prepaid recharge',
                 ),
               ),
             ],
@@ -272,13 +289,42 @@ class _WalletsScreenState extends State<WalletsScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Credit added successfully')),
-              );
+            onPressed: () async {
+              final amount = double.tryParse(amountController.text) ?? 0;
+              if (amount <= 0) return;
+              
+              // Update wallet balance
+              final currentBalance = (wallet['balance'] as num?)?.toDouble() ?? 0;
+              await SupabaseService.client
+                  .from('wallets')
+                  .update({
+                    'balance': currentBalance + amount,
+                    'updated_at': DateTime.now().toIso8601String(),
+                  })
+                  .eq('id', wallet['id']);
+              
+              // Record transaction
+              await SupabaseService.client
+                  .from('wallet_transactions')
+                  .insert({
+                    'wallet_id': wallet['id'],
+                    'amount': amount,
+                    'type': 'credit',
+                    'reason': reasonController.text.trim().isNotEmpty 
+                        ? reasonController.text.trim() 
+                        : 'Admin credit',
+                  });
+              
+              ref.invalidate(walletsDataProvider);
+              
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('₹${amount.toStringAsFixed(0)} added successfully')),
+                );
+              }
             },
-            child: const Text('Add Credit'),
+            child: const Text('Add Balance'),
           ),
         ],
       ),

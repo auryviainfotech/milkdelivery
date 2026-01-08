@@ -41,12 +41,23 @@ class _SplashScreenState extends State<SplashScreen>
         final user = SupabaseService.client.auth.currentUser;
         if (user != null) {
           // Check if profile is complete
-          final profileExists = await UserRepository.profileExists(user.id);
+          final profile = await SupabaseService.client
+              .from('profiles')
+              .select('full_name, phone')
+              .eq('id', user.id)
+              .maybeSingle();
+
           if (mounted) {
-            if (profileExists) {
-              context.go('/dashboard');
-            } else {
+            if (profile == null || 
+                profile['full_name'] == null || 
+                profile['phone'] == null ||
+                profile['full_name'].toString().isEmpty ||
+                profile['phone'].toString().isEmpty) {
+              // Profile incomplete - go to complete profile
               context.go('/complete-profile');
+            } else {
+              // Profile complete - go to dashboard
+              context.go('/dashboard');
             }
           }
         } else {

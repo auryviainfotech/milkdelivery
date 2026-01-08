@@ -1,21 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-/// Admin Dashboard Screen with stats and charts
-class AdminDashboardScreen extends StatelessWidget {
+/// Provider for dashboard stats
+final dashboardStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  // Get customer count
+  final customersResponse = await SupabaseService.client
+      .from('profiles')
+      .select('id')
+      .eq('role', 'customer');
+  final customerCount = customersResponse.length;
+  
+  // Get active subscription count
+  final subsResponse = await SupabaseService.client
+      .from('subscriptions')
+      .select('id')
+      .eq('status', 'active');
+  final activeSubCount = subsResponse.length;
+  
+  // Get today's deliveries
+  final today = DateTime.now();
+  final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+  final deliveriesResponse = await SupabaseService.client
+      .from('deliveries')
+      .select('id')
+      .eq('scheduled_date', todayStr);
+  final todayDeliveries = deliveriesResponse.length;
+  
+  // Get total revenue from subscriptions
+  final revenueResponse = await SupabaseService.client
+      .from('subscriptions')
+      .select('total_amount');
+  double totalRevenue = 0;
+  for (final sub in revenueResponse) {
+    totalRevenue += (sub['total_amount'] as num?)?.toDouble() ?? 0;
+  }
+  
+  return {
+    'customers': customerCount,
+    'activeSubscriptions': activeSubCount,
+    'todayDeliveries': todayDeliveries,
+    'totalRevenue': totalRevenue,
+  };
+});
+
+/// Admin Dashboard Screen with real stats
+class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // final colorScheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statsAsync = ref.watch(dashboardStatsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () => ref.invalidate(dashboardStatsProvider),
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
@@ -28,26 +71,32 @@ class AdminDashboardScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Stats Cards
-            _buildStatsRow(context),
+            statsAsync.when(
+              data: (stats) => _buildStatsRow(context, stats),
+              loading: () => _buildStatsRowLoading(context),
+              error: (e, _) => _buildStatsRow(context, {
+                'customers': 0,
+                'activeSubscriptions': 0,
+                'todayDeliveries': 0,
+                'totalRevenue': 0.0,
+              }),
+            ),
             const SizedBox(height: 24),
 
             // Charts Row
             LayoutBuilder(
               builder: (context, constraints) {
                 final availableWidth = constraints.maxWidth;
-                final chartWidth = (availableWidth - 24) / 3; // 2:1 ratio with spacing
+                final chartWidth = (availableWidth - 24) / 3;
 
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Revenue Chart
                     SizedBox(
                       width: chartWidth * 2,
                       child: _buildRevenueChart(context),
                     ),
                     const SizedBox(width: 24),
-
-                    // Subscription Types
                     SizedBox(
                       width: chartWidth,
                       child: _buildSubscriptionPieChart(context),
@@ -66,10 +115,32 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsRow(BuildContext context) {
+  Widget _buildStatsRowLoading(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 800;
+        final cardWidth = isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2;
+        
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: List.generate(4, (_) => SizedBox(
+            width: cardWidth,
+            height: 140,
+            child: const Card(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          )),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatsRow(BuildContext context, Map<String, dynamic> stats) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth > 800;
+        final cardWidth = isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2;
         
         return Wrap(
           spacing: 16,
@@ -78,42 +149,34 @@ class AdminDashboardScreen extends StatelessWidget {
             _buildStatCard(
               context,
               title: 'Total Customers',
-              value: '1,247',
-              change: '+12%',
-              isPositive: true,
+              value: '${stats['customers'] ?? 0}',
               icon: Icons.people,
               color: Colors.blue,
-              width: isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2,
+              width: cardWidth,
             ),
             _buildStatCard(
               context,
               title: 'Active Subscriptions',
-              value: '892',
-              change: '+8%',
-              isPositive: true,
+              value: '${stats['activeSubscriptions'] ?? 0}',
               icon: Icons.subscriptions,
               color: Colors.green,
-              width: isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2,
+              width: cardWidth,
             ),
             _buildStatCard(
               context,
-              title: 'Today\'s Orders',
-              value: '156',
-              change: '-3%',
-              isPositive: false,
-              icon: Icons.shopping_bag,
+              title: 'Today\'s Deliveries',
+              value: '${stats['todayDeliveries'] ?? 0}',
+              icon: Icons.local_shipping,
               color: Colors.orange,
-              width: isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2,
+              width: cardWidth,
             ),
             _buildStatCard(
               context,
-              title: 'Monthly Revenue',
-              value: '₹2,45,890',
-              change: '+15%',
-              isPositive: true,
+              title: 'Total Revenue',
+              value: '₹${((stats['totalRevenue'] ?? 0) as num).toStringAsFixed(0)}',
               icon: Icons.currency_rupee,
               color: Colors.purple,
-              width: isWide ? (constraints.maxWidth - 48) / 4 : (constraints.maxWidth - 16) / 2,
+              width: cardWidth,
             ),
           ],
         );
@@ -125,8 +188,6 @@ class AdminDashboardScreen extends StatelessWidget {
     BuildContext context, {
     required String title,
     required String value,
-    required String change,
-    required bool isPositive,
     required IconData icon,
     required Color color,
     required double width,
@@ -141,46 +202,13 @@ class AdminDashboardScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: color, size: 24),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isPositive 
-                          ? AppTheme.successColor.withValues(alpha: 0.1)
-                          : AppTheme.errorColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 14,
-                          color: isPositive ? AppTheme.successColor : AppTheme.errorColor,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          change,
-                          style: TextStyle(
-                            color: isPositive ? AppTheme.successColor : AppTheme.errorColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
               ),
               const SizedBox(height: 16),
               Text(
@@ -284,7 +312,7 @@ class AdminDashboardScreen extends StatelessWidget {
                       isStrokeCapRound: true,
                       belowBarData: BarAreaData(
                         show: true,
-                        color: colorScheme.primary.withValues(alpha: 0.1),
+                        color: colorScheme.primary.withOpacity(0.1),
                       ),
                       dotData: const FlDotData(show: false),
                     ),
@@ -299,8 +327,6 @@ class AdminDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildSubscriptionPieChart(BuildContext context) {
-    // final colorScheme = Theme.of(context).colorScheme;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -357,7 +383,7 @@ class AdminDashboardScreen extends StatelessWidget {
             _buildLegendItem('Full Cream', Colors.blue, '45%'),
             _buildLegendItem('Toned', Colors.green, '30%'),
             _buildLegendItem('Buffalo', Colors.orange, '15%'),
-            _buildLegendItem('Organic', Colors.purple, '10%'),
+            _buildLegendItem('Double Toned', Colors.purple, '10%'),
           ],
         ),
       ),
@@ -387,8 +413,6 @@ class AdminDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildRecentActivity(BuildContext context) {
-    // final colorScheme = Theme.of(context).colorScheme;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -399,50 +423,43 @@ class AdminDashboardScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Recent Activity',
+                  'Quick Actions',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('View All'),
-                ),
               ],
             ),
             const SizedBox(height: 16),
-            _buildActivityItem(
-              context,
-              icon: Icons.person_add,
-              color: Colors.blue,
-              title: 'New customer registered',
-              subtitle: 'Rahul Sharma - +91 98765 43210',
-              time: '2 mins ago',
-            ),
-            _buildActivityItem(
-              context,
-              icon: Icons.subscriptions,
-              color: Colors.green,
-              title: 'New subscription activated',
-              subtitle: 'Full Cream Milk - Daily Plan',
-              time: '15 mins ago',
-            ),
-            _buildActivityItem(
-              context,
-              icon: Icons.account_balance_wallet,
-              color: Colors.orange,
-              title: 'Wallet recharged',
-              subtitle: '₹500 added by Priya Singh',
-              time: '1 hour ago',
-            ),
-            _buildActivityItem(
-              context,
-              icon: Icons.local_shipping,
-              color: Colors.purple,
-              title: 'Delivery completed',
-              subtitle: '156 orders delivered today',
-              time: '2 hours ago',
-              showDivider: false,
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                _buildQuickAction(
+                  context,
+                  icon: Icons.person_add,
+                  label: 'Add Customer',
+                  color: Colors.blue,
+                ),
+                _buildQuickAction(
+                  context,
+                  icon: Icons.subscriptions,
+                  label: 'View Subscriptions',
+                  color: Colors.green,
+                ),
+                _buildQuickAction(
+                  context,
+                  icon: Icons.local_shipping,
+                  label: 'Generate Orders',
+                  color: Colors.orange,
+                ),
+                _buildQuickAction(
+                  context,
+                  icon: Icons.bar_chart,
+                  label: 'View Reports',
+                  color: Colors.purple,
+                ),
+              ],
             ),
           ],
         ),
@@ -450,44 +467,31 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActivityItem(
+  Widget _buildQuickAction(
     BuildContext context, {
     required IconData icon,
+    required String label,
     required Color color,
-    required String title,
-    required String subtitle,
-    required String time,
-    bool showDivider = true,
   }) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          title: Text(title),
-          subtitle: Text(
-            subtitle,
-            style: TextStyle(color: colorScheme.onSurfaceVariant),
-          ),
-          trailing: Text(
-            time,
-            style: TextStyle(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
-          ),
+    return InkWell(
+      onTap: () {},
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
         ),
-        if (showDivider) const Divider(),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
     );
   }
 }

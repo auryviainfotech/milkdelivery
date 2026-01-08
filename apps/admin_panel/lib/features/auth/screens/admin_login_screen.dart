@@ -24,22 +24,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     super.dispose();
   }
 
-  // Fixed admin email - only this email can login
-  static const String _adminEmail = 'mdt01569@gmail.com';
+
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-
-    // Check if email matches admin email
-    if (_emailController.text.trim().toLowerCase() != _adminEmail.toLowerCase()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Access denied. Only admin can login.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
 
     setState(() => _isLoading = true);
 
@@ -50,14 +38,38 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         password: _passwordController.text,
       );
 
-      if (response.user != null && mounted) {
-        context.go('/dashboard');
+      if (response.user != null) {
+        // Check if user has admin role
+        final profile = await SupabaseService.client
+            .from('profiles')
+            .select('role')
+            .eq('id', response.user!.id)
+            .maybeSingle();
+            
+        if (profile?['role'] == 'admin') {
+          if (mounted) {
+            context.go('/dashboard');
+          }
+        } else {
+          // Not an admin - sign out and show error
+          await SupabaseService.client.auth.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Access denied. Admin privileges required.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
         String errorMsg = 'Login failed';
         if (e.toString().contains('Invalid login credentials')) {
-          errorMsg = 'Wrong password. Please try again.';
+          errorMsg = 'Invalid email or password';
+        } else {
+          errorMsg = e.toString();
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),

@@ -15,6 +15,35 @@ final deliveryPersonsProvider = FutureProvider<List<Map<String, dynamic>>>((ref)
   return List<Map<String, dynamic>>.from(response);
 });
 
+/// Provider for today's delivery statistics
+final todayDeliveryStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final today = DateTime.now();
+  final startOfDay = DateTime(today.year, today.month, today.day);
+  final endOfDay = startOfDay.add(const Duration(days: 1));
+  
+  // Get all deliveries completed today
+  final response = await SupabaseService.client
+      .from('deliveries')
+      .select('*, delivery_person_id')
+      .eq('status', 'delivered')
+      .gte('delivered_at', startOfDay.toIso8601String())
+      .lt('delivered_at', endOfDay.toIso8601String());
+  
+  final deliveries = List<Map<String, dynamic>>.from(response);
+  
+  // Count deliveries per person
+  final Map<String, int> perPersonCount = {};
+  for (final d in deliveries) {
+    final personId = d['delivery_person_id']?.toString() ?? '';
+    perPersonCount[personId] = (perPersonCount[personId] ?? 0) + 1;
+  }
+  
+  return {
+    'total': deliveries.length,
+    'perPerson': perPersonCount,
+  };
+});
+
 /// Delivery Persons Management Screen
 class DeliveryPersonsScreen extends ConsumerStatefulWidget {
   const DeliveryPersonsScreen({super.key});
@@ -61,6 +90,10 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
               'Manage delivery personnel accounts',
               style: TextStyle(color: colorScheme.onSurfaceVariant),
             ),
+            const SizedBox(height: 24),
+
+            // Today's Delivery Stats
+            _buildTodayStatsCard(context, ref),
             const SizedBox(height: 24),
 
             // Delivery persons list
@@ -118,7 +151,17 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                     children: [
                       for (int i = 0; i < persons.length; i++) ...[
                         if (i > 0) const Divider(height: 1),
-                        _buildPersonTile(context, persons[i]),
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final statsAsync = ref.watch(todayDeliveryStatsProvider);
+                            final deliveryCount = statsAsync.when(
+                              data: (stats) => (stats['perPerson'] as Map<String, int>? ?? {})[persons[i]['id']] ?? 0,
+                              loading: () => 0,
+                              error: (_, __) => 0,
+                            );
+                            return _buildPersonTile(context, persons[i], deliveryCount);
+                          },
+                        ),
                       ],
                     ],
                   ),
@@ -131,7 +174,7 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
     );
   }
 
-  Widget _buildPersonTile(BuildContext context, Map<String, dynamic> person) {
+  Widget _buildPersonTile(BuildContext context, Map<String, dynamic> person, int todayDeliveries) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -159,9 +202,49 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                   person['phone'] ?? 'No phone',
                   style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
+                if (person['qr_code'] != null && person['qr_code'].toString().isNotEmpty)
+                  Row(
+                    children: [
+                      Icon(Icons.location_on, size: 14, color: colorScheme.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        person['qr_code'],
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
+          // Today's delivery count badge
+          if (todayDeliveries > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.primary,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, size: 14, color: colorScheme.onPrimary),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$todayDeliveries today',
+                    style: TextStyle(
+                      color: colorScheme.onPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -197,6 +280,7 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
     final passwordController = TextEditingController();
+    final areaController = TextEditingController();
     bool isLoading = false;
 
     await showDialog(
@@ -243,6 +327,17 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                     helperText: 'Share this password without spaces',
                   ),
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: areaController,
+                  decoration: const InputDecoration(
+                    labelText: 'Assigned Area/Location',
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                    border: OutlineInputBorder(),
+                    hintText: 'e.g., MG Road, Sector 5, etc.',
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
               ],
             ),
           ),
@@ -279,6 +374,7 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                           'phone': '+91${phoneController.text}',
                           'role': 'delivery',
                           'address': passwordController.text, // Store password in address field for login
+                          'qr_code': areaController.text.trim().isNotEmpty ? areaController.text.trim() : null, // Store assigned area in qr_code field
                           'created_at': DateTime.now().toIso8601String(),
                         });
                         
@@ -431,5 +527,121 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
         }
       }
     }
+  }
+
+  Widget _buildTodayStatsCard(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final statsAsync = ref.watch(todayDeliveryStatsProvider);
+    final personsAsync = ref.watch(deliveryPersonsProvider);
+
+    return Card(
+      color: colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.delivery_dining, color: colorScheme.onPrimaryContainer),
+                const SizedBox(width: 12),
+                Text(
+                  "Today's Deliveries",
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(Icons.refresh, color: colorScheme.onPrimaryContainer),
+                  onPressed: () {
+                    ref.invalidate(todayDeliveryStatsProvider);
+                  },
+                  tooltip: 'Refresh',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            statsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Text('Error: $e', style: TextStyle(color: colorScheme.error)),
+              data: (stats) {
+                final total = stats['total'] as int;
+                final perPerson = stats['perPerson'] as Map<String, int>;
+                
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Total count
+                    Row(
+                      children: [
+                        Text(
+                          '$total',
+                          style: theme.textTheme.headlineLarge?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'deliveries completed today',
+                          style: TextStyle(color: colorScheme.onPrimaryContainer.withOpacity(0.8)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Per person breakdown
+                    if (perPerson.isNotEmpty) ...[
+                      Text(
+                        'By Delivery Person:',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      personsAsync.when(
+                        loading: () => const Text('...'),
+                        error: (_, __) => const Text('Error loading names'),
+                        data: (persons) {
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: perPerson.entries.map((entry) {
+                              final person = persons.firstWhere(
+                                (p) => p['id'] == entry.key,
+                                orElse: () => {'full_name': 'Unknown'},
+                              );
+                              return Chip(
+                                avatar: CircleAvatar(
+                                  backgroundColor: colorScheme.primary,
+                                  child: Text(
+                                    '${entry.value}',
+                                    style: TextStyle(color: colorScheme.onPrimary, fontSize: 12),
+                                  ),
+                                ),
+                                label: Text(person['full_name'] ?? 'Unknown'),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ] else
+                      Text(
+                        'No deliveries recorded yet today',
+                        style: TextStyle(
+                          color: colorScheme.onPrimaryContainer.withOpacity(0.7),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

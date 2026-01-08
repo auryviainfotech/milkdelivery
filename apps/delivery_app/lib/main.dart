@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app/router.dart';
+import 'services/offline_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
+
+  // Initialize Supabase from environment
   await SupabaseService.initialize(
-    supabaseUrl: 'https://qxwjtbhyywwpcehwhegz.supabase.co',
-    supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4d2p0Ymh5eXd3cGNlaHdoZWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc2Mjk3MjAsImV4cCI6MjA4MzIwNTcyMH0.kq3H9IVupqzllFLCHu5ZHC0RvLp0ctMuyThftL8_G0c',
+    supabaseUrl: dotenv.env['SUPABASE_URL'] ?? '',
+    supabaseAnonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
+
+  // Initialize offline storage
+  await OfflineService.init();
 
   runApp(
     const ProviderScope(

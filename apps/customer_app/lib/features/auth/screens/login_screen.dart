@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Customer login screen with phone + password
+/// Customer login screen with email/password
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -12,7 +12,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
@@ -20,58 +20,77 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _handleLogin() async {
+  Future<void> _handleEmailLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // Login with email (using phone as email format for Supabase)
-      final email = '${_phoneController.text.trim()}@milkdelivery.app';
-      
       final response = await SupabaseService.client.auth.signInWithPassword(
-        email: email,
+        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
       if (response.user != null && mounted) {
-        // Check if profile exists
-        final profileExists = await UserRepository.profileExists(response.user!.id);
-        
-        if (profileExists) {
-          context.go('/dashboard');
-        } else {
-          context.go('/complete-profile');
-        }
+        await _navigateAfterAuth(response.user!.id);
       }
-    } catch (e) {
+    } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_getErrorMessage(e.toString())),
+            content: Text(_getErrorMessage(e.message)),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } finally {
+    } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _navigateAfterAuth(String userId) async {
+    // Check if profile is complete
+    final profile = await SupabaseService.client
+        .from('profiles')
+        .select('full_name, phone')
+        .eq('id', userId)
+        .maybeSingle();
+
+    if (mounted) {
+      if (profile == null || 
+          profile['full_name'] == null || 
+          profile['phone'] == null ||
+          profile['full_name'].toString().isEmpty ||
+          profile['phone'].toString().isEmpty) {
+        // Profile incomplete - go to complete profile
+        context.go('/complete-profile');
+      } else {
+        // Profile complete - go to dashboard
+        context.go('/dashboard');
       }
     }
   }
 
   String _getErrorMessage(String error) {
     if (error.contains('Invalid login credentials')) {
-      return 'Wrong phone number or password';
+      return 'Wrong email or password';
     } else if (error.contains('Email not confirmed')) {
-      return 'Please verify your account first';
+      return 'Please verify your email first';
+    } else if (error.contains('User not found')) {
+      return 'No account found. Please sign up first.';
     }
-    return 'Login failed. Please try again.';
+    return error;
   }
 
   @override
@@ -88,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 48),
 
                 // Logo
                 Container(
@@ -114,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Login to continue',
+                  'Sign in to your account',
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -122,44 +141,27 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 48),
 
-                // Phone number input
+                // Email input
                 TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Mobile Number',
-                    hintText: '9876543210',
-                    prefixIcon: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('🇮🇳 +91', style: theme.textTheme.bodyLarge),
-                          const SizedBox(width: 8),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            color: colorScheme.outline,
-                          ),
-                        ],
-                      ),
-                    ),
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    hintText: 'you@example.com',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your phone number';
+                      return 'Please enter your email';
                     }
-                    if (value.length != 10) {
-                      return 'Phone number must be 10 digits';
+                    if (!value.contains('@') || !value.contains('.')) {
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
 
                 // Password input
                 TextFormField(
@@ -169,6 +171,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: 'Password',
                     hintText: 'Enter your password',
                     prefixIcon: const Icon(Icons.lock_outline),
+                    border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -192,14 +195,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Login button
                 FilledButton(
-                  onPressed: _isLoading ? null : _handleLogin,
+                  onPressed: _isLoading ? null : _handleEmailLogin,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                   child: _isLoading
                       ? const SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Login'),
+                      : const Text('Sign In', style: TextStyle(fontSize: 16)),
                 ),
                 const SizedBox(height: 24),
 

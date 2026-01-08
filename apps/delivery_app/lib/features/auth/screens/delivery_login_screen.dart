@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Delivery personnel login screen with phone + password
 class DeliveryLoginScreen extends StatefulWidget {
@@ -50,6 +51,11 @@ class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
       if (response['address'] != password) {
         throw Exception('Invalid password');
       }
+
+      // Store the profile ID for later use
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('delivery_person_id', response['id']);
+      await prefs.setString('delivery_person_name', response['full_name'] ?? 'Delivery Person');
 
       if (mounted) {
         context.go('/dashboard');

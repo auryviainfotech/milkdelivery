@@ -21,7 +21,9 @@ class UpiPaymentService {
       'tn': transactionNote,
       'am': amount.toStringAsFixed(2),
       'cu': 'INR',
-      'tr': transactionId,
+      'tr': transactionId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), ''), // Clean ID
+      'mc': '0000', // External Merchant Code
+      'mode': '02', // Secure Intent Mode
     };
 
     final queryString = params.entries
