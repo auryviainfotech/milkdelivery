@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
+import '../../../shared/providers/auth_providers.dart';
 
 /// Screen to collect user name and mobile number after signup
-class CompleteProfileScreen extends StatefulWidget {
+class CompleteProfileScreen extends ConsumerStatefulWidget {
   const CompleteProfileScreen({super.key});
 
   @override
-  State<CompleteProfileScreen> createState() => _CompleteProfileScreenState();
+  ConsumerState<CompleteProfileScreen> createState() => _CompleteProfileScreenState();
 }
 
-class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
+class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -50,6 +52,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         'user_id': user.id,
         'balance': 0.0,
       });
+
+      // Force refresh of profile provider so Dashboard gets new data
+      ref.invalidate(userProfileProvider);
+      // Wait a tiny bit for the invalidation to propagate effectively or data to settle
+      await Future.delayed(const Duration(milliseconds: 300));
 
       if (mounted) {
         context.go('/dashboard');
