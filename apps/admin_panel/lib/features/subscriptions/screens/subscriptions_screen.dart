@@ -324,27 +324,143 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   void _generateTomorrowOrders() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Generate Tomorrow\'s Orders'),
-        content: const Text(
-          'This will create delivery orders for all active subscriptions (created before 10 PM cutoff). Continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Orders generated successfully!')),
-              );
-            },
-            child: const Text('Generate'),
-          ),
+      barrierDismissible: false,
+      builder: (context) => _GenerateOrdersDialog(
+        onComplete: () => ref.invalidate(subscriptionsProvider),
+      ),
+    );
+  }
+}
+
+/// Dialog for generating orders with progress
+class _GenerateOrdersDialog extends StatefulWidget {
+  final VoidCallback onComplete;
+  
+  const _GenerateOrdersDialog({required this.onComplete});
+
+  @override
+  State<_GenerateOrdersDialog> createState() => _GenerateOrdersDialogState();
+}
+
+class _GenerateOrdersDialogState extends State<_GenerateOrdersDialog> {
+  bool _isProcessing = false;
+  Map<String, int>? _result;
+  String? _error;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_result != null ? 'Orders Generated!' : 'Generate Tomorrow\'s Orders'),
+      content: _buildContent(),
+      actions: _buildActions(),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isProcessing) {
+      return const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Processing subscriptions...'),
+        ],
+      );
+    }
+
+    if (_error != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, color: AppTheme.errorColor, size: 48),
+          const SizedBox(height: 16),
+          Text('Error: $_error'),
+        ],
+      );
+    }
+
+    if (_result != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle, color: AppTheme.successColor, size: 48),
+          const SizedBox(height: 16),
+          _buildResultRow(Icons.shopping_cart, 'Orders Created', _result!['orders_created'] ?? 0),
+          _buildResultRow(Icons.local_shipping, 'Deliveries Assigned', _result!['deliveries_assigned'] ?? 0),
+          if ((_result!['unassigned'] ?? 0) > 0)
+            _buildResultRow(Icons.warning_amber, 'Unassigned (no matching delivery person)', _result!['unassigned'] ?? 0, isWarning: true),
+        ],
+      );
+    }
+
+    return const Text(
+      'This will create delivery orders for all active subscriptions for tomorrow.\n\n'
+      'Orders will be automatically assigned to delivery persons based on PIN code matching.',
+    );
+  }
+
+  Widget _buildResultRow(IconData icon, String label, int count, {bool isWarning = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: isWarning ? AppTheme.warningColor : AppTheme.successColor),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label)),
+          Text('$count', style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );
+  }
+
+  List<Widget> _buildActions() {
+    if (_result != null || _error != null) {
+      return [
+        FilledButton(
+          onPressed: () {
+            widget.onComplete();
+            Navigator.pop(context);
+          },
+          child: const Text('Close'),
+        ),
+      ];
+    }
+
+    return [
+      TextButton(
+        onPressed: _isProcessing ? null : () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _isProcessing ? null : _generate,
+        child: const Text('Generate'),
+      ),
+    ];
+  }
+
+  Future<void> _generate() async {
+    setState(() {
+      _isProcessing = true;
+      _error = null;
+    });
+
+    try {
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      final result = await OrderGenerationService.generateOrdersForDate(tomorrow);
+      
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _result = result;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _error = e.toString();
+        });
+      }
+    }
   }
 }

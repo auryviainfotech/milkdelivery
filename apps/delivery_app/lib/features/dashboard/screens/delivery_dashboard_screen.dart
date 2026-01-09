@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Provider for current delivery person's ID from SharedPreferences
 final deliveryPersonIdProvider = FutureProvider<String?>((ref) async {
@@ -292,13 +293,30 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                         ),
                       ),
                       if (phone.isNotEmpty)
-                        Text(
-                          phone,
-                          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+                        Row(
+                          children: [
+                            Icon(Icons.phone, size: 12, color: colorScheme.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              phone,
+                              style: TextStyle(color: colorScheme.primary, fontSize: 12),
+                            ),
+                          ],
                         ),
                     ],
                   ),
                 ),
+                // Call Button
+                if (phone.isNotEmpty)
+                  IconButton(
+                    onPressed: () => _makeCall(phone),
+                    icon: Icon(Icons.phone, color: colorScheme.primary),
+                    tooltip: 'Call Customer',
+                    style: IconButton.styleFrom(
+                      backgroundColor: colorScheme.primaryContainer,
+                    ),
+                  ),
+                const SizedBox(width: 4),
                 // Status Badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -342,6 +360,14 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
             if (!isDelivered)
               Row(
                 children: [
+                  // Navigate Button
+                  if (address.isNotEmpty && address != 'Address not available')
+                    IconButton.filledTonal(
+                      onPressed: () => _openMaps(address),
+                      icon: const Icon(Icons.navigation),
+                      tooltip: 'Navigate',
+                    ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _reportIssue(delivery),
@@ -352,7 +378,7 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     flex: 2,
                     child: FilledButton.icon(
@@ -367,6 +393,21 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
         ),
       ),
     );
+  }
+
+  Future<void> _makeCall(String phone) async {
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _openMaps(String address) async {
+    final encodedAddress = Uri.encodeComponent(address);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _markAsDelivered(Map<String, dynamic> delivery) async {

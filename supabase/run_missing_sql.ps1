@@ -29,4 +29,8 @@ Write-Host "`n=== Making phone column nullable ===" -ForegroundColor Cyan
 
 Invoke-SQL "ALTER TABLE profiles ALTER COLUMN phone DROP NOT NULL;"
 
+Write-Host "`n=== Adding service_pin_codes for delivery person areas ===" -ForegroundColor Cyan
+
+Invoke-SQL "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS service_pin_codes TEXT[];"
+
 Write-Host "`n=== Done! ===" -ForegroundColor Green

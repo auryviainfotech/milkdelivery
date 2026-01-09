@@ -1,0 +1,24 @@
+# Keystore configuration for release builds
+# IMPORTANT: Copy this file to key.properties and fill in your values
+#            Do NOT commit key.properties to version control!
+
+# Path to your keystore file (relative to android/app directory or absolute path)
+storeFile=milk-delivery-release.jks
+
+# Keystore password
+storePassword=YOUR_KEYSTORE_PASSWORD_HERE
+
+# Key alias
+keyAlias=milk-delivery-key
+
+# Key password  
+keyPassword=YOUR_KEY_PASSWORD_HERE
+
+# ============================================
+# HOW TO CREATE A KEYSTORE:
+# ============================================
+# Run this command in the android/app directory:
+#
+# keytool -genkey -v -keystore milk-delivery-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias milk-delivery-key
+#
+# Then copy this file to key.properties and fill in your passwords.

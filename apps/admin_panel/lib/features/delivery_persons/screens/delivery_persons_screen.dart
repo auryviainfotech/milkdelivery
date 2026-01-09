@@ -202,21 +202,8 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                   person['phone'] ?? 'No phone',
                   style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
-                if (person['qr_code'] != null && person['qr_code'].toString().isNotEmpty)
-                  Row(
-                    children: [
-                      Icon(Icons.location_on, size: 14, color: colorScheme.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        person['qr_code'],
-                        style: TextStyle(
-                          color: colorScheme.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+                // Show service PIN codes
+                  _buildPinCodesRow(person, colorScheme),
               ],
             ),
           ),
@@ -276,6 +263,56 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
     );
   }
 
+  Widget _buildPinCodesRow(Map<String, dynamic> person, ColorScheme colorScheme) {
+    // Check for service_pin_codes array first, then fall back to qr_code
+    final servicePinCodes = person['service_pin_codes'] as List<dynamic>?;
+    final legacyArea = person['qr_code'] as String?;
+    
+    if ((servicePinCodes == null || servicePinCodes.isEmpty) && 
+        (legacyArea == null || legacyArea.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    
+    if (servicePinCodes != null && servicePinCodes.isNotEmpty) {
+      return Row(
+        children: [
+          Icon(Icons.pin_drop, size: 14, color: colorScheme.primary),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              servicePinCodes.join(', '),
+              style: TextStyle(
+                color: colorScheme.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+    
+    // Fallback to legacy qr_code field
+    return Row(
+      children: [
+        Icon(Icons.location_on, size: 14, color: colorScheme.primary),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            legacyArea!,
+            style: TextStyle(
+              color: colorScheme.primary,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _showAddDialog(BuildContext context) async {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
@@ -331,12 +368,12 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                 TextField(
                   controller: areaController,
                   decoration: const InputDecoration(
-                    labelText: 'Assigned Area/Location',
-                    prefixIcon: Icon(Icons.location_on_outlined),
+                    labelText: 'Service PIN Codes',
+                    prefixIcon: Icon(Icons.pin_drop_outlined),
                     border: OutlineInputBorder(),
-                    hintText: 'e.g., MG Road, Sector 5, etc.',
+                    hintText: 'e.g., 500001, 500002, 500003',
+                    helperText: 'Comma-separated PIN codes this person will serve',
                   ),
-                  textCapitalization: TextCapitalization.words,
                 ),
               ],
             ),
@@ -368,13 +405,21 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                         String hex(int n) => List.generate(n, (_) => r.nextInt(16).toRadixString(16)).join();
                         final uniqueId = '${hex(8)}-${hex(4)}-4${hex(3)}-${['8','9','a','b'][r.nextInt(4)]}${hex(3)}-${hex(12)}';
                         
+                        // Parse PIN codes from comma-separated input
+                        final pinCodes = areaController.text
+                            .split(',')
+                            .map((p) => p.trim())
+                            .where((p) => p.isNotEmpty && RegExp(r'^\d{6}$').hasMatch(p))
+                            .toList();
+                        
                         await SupabaseService.client.from('profiles').insert({
                           'id': uniqueId,
                           'full_name': nameController.text.trim(),
                           'phone': '+91${phoneController.text}',
                           'role': 'delivery',
                           'address': passwordController.text, // Store password in address field for login
-                          'qr_code': areaController.text.trim().isNotEmpty ? areaController.text.trim() : null, // Store assigned area in qr_code field
+                          'qr_code': areaController.text.trim().isNotEmpty ? areaController.text.trim() : null, // Legacy area field
+                          'service_pin_codes': pinCodes.isNotEmpty ? pinCodes : null,
                           'created_at': DateTime.now().toIso8601String(),
                         });
                         
@@ -437,6 +482,9 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
 
   Future<void> _showEditDialog(BuildContext context, Map<String, dynamic> person) async {
     final nameController = TextEditingController(text: person['full_name']);
+    // Convert service_pin_codes array to comma-separated string
+    final existingPins = (person['service_pin_codes'] as List<dynamic>?)?.join(', ') ?? person['qr_code'] ?? '';
+    final pinCodesController = TextEditingController(text: existingPins);
 
     await showDialog(
       context: context,
@@ -444,13 +492,29 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
         title: const Text('Edit Delivery Person'),
         content: SizedBox(
           width: 400,
-          child: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(
-              labelText: 'Full Name',
-              prefixIcon: Icon(Icons.person_outline),
-              border: OutlineInputBorder(),
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name',
+                  prefixIcon: Icon(Icons.person_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinCodesController,
+                decoration: const InputDecoration(
+                  labelText: 'Service PIN Codes',
+                  prefixIcon: Icon(Icons.pin_drop_outlined),
+                  border: OutlineInputBorder(),
+                  hintText: 'e.g., 500001, 500002, 500003',
+                  helperText: 'Comma-separated PIN codes',
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
@@ -461,8 +525,17 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
           FilledButton(
             onPressed: () async {
               try {
+                // Parse PIN codes
+                final pinCodes = pinCodesController.text
+                    .split(',')
+                    .map((p) => p.trim())
+                    .where((p) => p.isNotEmpty && RegExp(r'^\d{6}$').hasMatch(p))
+                    .toList();
+                
                 await SupabaseService.client.from('profiles').update({
                   'full_name': nameController.text.trim(),
+                  'service_pin_codes': pinCodes.isNotEmpty ? pinCodes : null,
+                  'qr_code': pinCodesController.text.trim().isNotEmpty ? pinCodesController.text.trim() : null,
                 }).eq('id', person['id']);
 
                 if (context.mounted) {

@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../services/razorpay_service.dart';
+import '../../../shared/providers/auth_providers.dart';
 
 /// 4 Hardcoded milk products
 final List<Map<String, dynamic>> _products = [
@@ -967,5 +968,9 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
       'status': 'active',
       'total_amount': _totalPrice,
     });
+    
+    // Refresh user profile provider so profile screen shows updated address
+    ref.invalidate(userProfileProvider);
+    ref.invalidate(activeSubscriptionsProvider);
   }
 }
