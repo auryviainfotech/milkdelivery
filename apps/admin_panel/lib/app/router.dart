@@ -6,9 +6,10 @@ import '../features/products/screens/products_screen.dart';
 import '../features/customers/screens/customers_screen.dart';
 import '../features/delivery_persons/screens/delivery_persons_screen.dart';
 import '../features/subscriptions/screens/subscriptions_screen.dart';
+import '../features/deliveries/screens/deliveries_screen.dart';
 import '../features/wallets/screens/wallets_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
-import '../features/routes/screens/routes_screen.dart';
+import '../features/assignments/screens/assignments_screen.dart';
 import '../shared/widgets/admin_shell.dart';
 
 final adminRouter = GoRouter(
@@ -60,6 +61,16 @@ final adminRouter = GoRouter(
           builder: (context, state) => const SubscriptionsScreen(),
         ),
         GoRoute(
+          path: '/deliveries',
+          name: 'deliveries',
+          builder: (context, state) => const DeliveriesScreen(),
+        ),
+        GoRoute(
+          path: '/assignments',
+          name: 'assignments',
+          builder: (context, state) => const AssignmentsScreen(),
+        ),
+        GoRoute(
           path: '/wallets',
           name: 'wallets',
           builder: (context, state) => const WalletsScreen(),
@@ -68,11 +79,6 @@ final adminRouter = GoRouter(
           path: '/reports',
           name: 'reports',
           builder: (context, state) => const ReportsScreen(),
-        ),
-        GoRoute(
-          path: '/routes',
-          name: 'routes',
-          builder: (context, state) => const RoutesScreen(),
         ),
       ],
     ),

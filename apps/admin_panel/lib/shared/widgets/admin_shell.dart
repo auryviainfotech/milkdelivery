@@ -73,6 +73,16 @@ class AdminShell extends StatelessWidget {
                 label: Text('Subscriptions'),
               ),
               const NavigationDrawerDestination(
+                icon: Icon(Icons.local_shipping_outlined),
+                selectedIcon: Icon(Icons.local_shipping),
+                label: Text('Deliveries'),
+              ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.assignment_ind_outlined),
+                selectedIcon: Icon(Icons.assignment_ind),
+                label: Text('Assignments'),
+              ),
+              const NavigationDrawerDestination(
                 icon: Icon(Icons.account_balance_wallet_outlined),
                 selectedIcon: Icon(Icons.account_balance_wallet),
                 label: Text('Wallets'),
@@ -81,11 +91,6 @@ class AdminShell extends StatelessWidget {
                 icon: Icon(Icons.bar_chart_outlined),
                 selectedIcon: Icon(Icons.bar_chart),
                 label: Text('Reports'),
-              ),
-              const NavigationDrawerDestination(
-                icon: Icon(Icons.route_outlined),
-                selectedIcon: Icon(Icons.route),
-                label: Text('Routes'),
               ),
               
               const SizedBox(height: 40),
@@ -121,9 +126,10 @@ class AdminShell extends StatelessWidget {
     if (location.startsWith('/customers')) return 2;
     if (location.startsWith('/delivery-persons')) return 3;
     if (location.startsWith('/subscriptions')) return 4;
-    if (location.startsWith('/wallets')) return 5;
-    if (location.startsWith('/reports')) return 6;
-    if (location.startsWith('/routes')) return 7;
+    if (location.startsWith('/deliveries')) return 5;
+    if (location.startsWith('/assignments')) return 6;
+    if (location.startsWith('/wallets')) return 7;
+    if (location.startsWith('/reports')) return 8;
     return 0;
   }
 
@@ -134,9 +140,10 @@ class AdminShell extends StatelessWidget {
       '/customers',
       '/delivery-persons',
       '/subscriptions',
+      '/deliveries',
+      '/assignments',
       '/wallets',
       '/reports',
-      '/routes',
     ];
     context.go(routes[index]);
   }

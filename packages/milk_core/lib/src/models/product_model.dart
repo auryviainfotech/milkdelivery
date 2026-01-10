@@ -13,6 +13,7 @@ class ProductModel with _$ProductModel {
     required double price,
     @Default('litre') String unit,
     String? imageUrl,
+    @Default('🥛') String emoji,
     @Default(true) bool isActive,
     DateTime? createdAt,
   }) = _ProductModel;

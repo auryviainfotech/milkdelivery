@@ -26,6 +26,7 @@ mixin _$ProductModel {
   double get price => throw _privateConstructorUsedError;
   String get unit => throw _privateConstructorUsedError;
   String? get imageUrl => throw _privateConstructorUsedError;
+  String get emoji => throw _privateConstructorUsedError;
   bool get isActive => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
@@ -52,6 +53,7 @@ abstract class $ProductModelCopyWith<$Res> {
       double price,
       String unit,
       String? imageUrl,
+      String emoji,
       bool isActive,
       DateTime? createdAt});
 }
@@ -77,6 +79,7 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
     Object? price = null,
     Object? unit = null,
     Object? imageUrl = freezed,
+    Object? emoji = null,
     Object? isActive = null,
     Object? createdAt = freezed,
   }) {
@@ -105,6 +108,10 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
           ? _value.imageUrl
           : imageUrl // ignore: cast_nullable_to_non_nullable
               as String?,
+      emoji: null == emoji
+          ? _value.emoji
+          : emoji // ignore: cast_nullable_to_non_nullable
+              as String,
       isActive: null == isActive
           ? _value.isActive
           : isActive // ignore: cast_nullable_to_non_nullable
@@ -132,6 +139,7 @@ abstract class _$$ProductModelImplCopyWith<$Res>
       double price,
       String unit,
       String? imageUrl,
+      String emoji,
       bool isActive,
       DateTime? createdAt});
 }
@@ -155,6 +163,7 @@ class __$$ProductModelImplCopyWithImpl<$Res>
     Object? price = null,
     Object? unit = null,
     Object? imageUrl = freezed,
+    Object? emoji = null,
     Object? isActive = null,
     Object? createdAt = freezed,
   }) {
@@ -183,6 +192,10 @@ class __$$ProductModelImplCopyWithImpl<$Res>
           ? _value.imageUrl
           : imageUrl // ignore: cast_nullable_to_non_nullable
               as String?,
+      emoji: null == emoji
+          ? _value.emoji
+          : emoji // ignore: cast_nullable_to_non_nullable
+              as String,
       isActive: null == isActive
           ? _value.isActive
           : isActive // ignore: cast_nullable_to_non_nullable
@@ -205,6 +218,7 @@ class _$ProductModelImpl implements _ProductModel {
       required this.price,
       this.unit = 'litre',
       this.imageUrl,
+      this.emoji = '🥛',
       this.isActive = true,
       this.createdAt});
 
@@ -226,13 +240,16 @@ class _$ProductModelImpl implements _ProductModel {
   final String? imageUrl;
   @override
   @JsonKey()
+  final String emoji;
+  @override
+  @JsonKey()
   final bool isActive;
   @override
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'ProductModel(id: $id, name: $name, description: $description, price: $price, unit: $unit, imageUrl: $imageUrl, isActive: $isActive, createdAt: $createdAt)';
+    return 'ProductModel(id: $id, name: $name, description: $description, price: $price, unit: $unit, imageUrl: $imageUrl, emoji: $emoji, isActive: $isActive, createdAt: $createdAt)';
   }
 
   @override
@@ -248,6 +265,7 @@ class _$ProductModelImpl implements _ProductModel {
             (identical(other.unit, unit) || other.unit == unit) &&
             (identical(other.imageUrl, imageUrl) ||
                 other.imageUrl == imageUrl) &&
+            (identical(other.emoji, emoji) || other.emoji == emoji) &&
             (identical(other.isActive, isActive) ||
                 other.isActive == isActive) &&
             (identical(other.createdAt, createdAt) ||
@@ -257,7 +275,7 @@ class _$ProductModelImpl implements _ProductModel {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(runtimeType, id, name, description, price,
-      unit, imageUrl, isActive, createdAt);
+      unit, imageUrl, emoji, isActive, createdAt);
 
   /// Create a copy of ProductModel
   /// with the given fields replaced by the non-null parameter values.
@@ -283,6 +301,7 @@ abstract class _ProductModel implements ProductModel {
       required final double price,
       final String unit,
       final String? imageUrl,
+      final String emoji,
       final bool isActive,
       final DateTime? createdAt}) = _$ProductModelImpl;
 
@@ -301,6 +320,8 @@ abstract class _ProductModel implements ProductModel {
   String get unit;
   @override
   String? get imageUrl;
+  @override
+  String get emoji;
   @override
   bool get isActive;
   @override

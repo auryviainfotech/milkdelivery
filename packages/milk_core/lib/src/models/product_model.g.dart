@@ -14,6 +14,7 @@ _$ProductModelImpl _$$ProductModelImplFromJson(Map<String, dynamic> json) =>
       price: (json['price'] as num).toDouble(),
       unit: json['unit'] as String? ?? 'litre',
       imageUrl: json['imageUrl'] as String?,
+      emoji: json['emoji'] as String? ?? '🥛',
       isActive: json['isActive'] as bool? ?? true,
       createdAt: json['createdAt'] == null
           ? null
@@ -28,6 +29,7 @@ Map<String, dynamic> _$$ProductModelImplToJson(_$ProductModelImpl instance) =>
       'price': instance.price,
       'unit': instance.unit,
       'imageUrl': instance.imageUrl,
+      'emoji': instance.emoji,
       'isActive': instance.isActive,
       'createdAt': instance.createdAt?.toIso8601String(),
     };

@@ -1,17 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
+import '../../dashboard/screens/delivery_dashboard_screen.dart';
+
+/// Provider to fetch delivery details
+final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, deliveryId) async {
+  try {
+    final response = await SupabaseService.client
+        .from('deliveries')
+        .select('*, orders(*, profiles(full_name, address, phone))')
+        .eq('id', deliveryId)
+        .single();
+    return response;
+  } catch (e) {
+    print('Error fetching delivery: $e');
+    return null;
+  }
+});
 
 /// Delivery confirmation screen
-class DeliveryConfirmScreen extends StatelessWidget {
+class DeliveryConfirmScreen extends ConsumerWidget {
   final String orderId;
 
   const DeliveryConfirmScreen({super.key, required this.orderId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final deliveryAsync = ref.watch(deliveryDetailProvider(orderId));
 
     return Scaffold(
       appBar: AppBar(
@@ -21,172 +39,188 @@ class DeliveryConfirmScreen extends StatelessWidget {
         ),
         title: const Text('Confirm Delivery'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Customer details card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+      body: deliveryAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (delivery) {
+          if (delivery == null) {
+            return const Center(child: Text('Delivery not found'));
+          }
+          
+          final order = delivery['orders'] as Map<String, dynamic>?;
+          final customer = order?['profiles'] as Map<String, dynamic>?;
+          final customerName = customer?['full_name'] ?? 'Customer';
+          final address = customer?['address'] ?? 'Address not available';
+          final phone = customer?['phone'] ?? '';
+          
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Customer details card
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          backgroundColor: colorScheme.primaryContainer,
-                          radius: 24,
-                          child: Text(
-                            'R',
-                            style: TextStyle(
-                              color: colorScheme.onPrimaryContainer,
-                              fontSize: 20,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Rahul Sharma',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                'House 45, Sector 45, Gurgaon',
-                                style: TextStyle(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    Text(
-                      'Order Details',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text('🥛', style: TextStyle(fontSize: 24)),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Row(
                           children: [
-                            Text(
-                              'Full Cream Milk 500ml',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                fontWeight: FontWeight.w500,
+                            CircleAvatar(
+                              backgroundColor: colorScheme.primaryContainer,
+                              radius: 24,
+                              child: Text(
+                                customerName.isNotEmpty ? customerName[0].toUpperCase() : 'C',
+                                style: TextStyle(
+                                  color: colorScheme.onPrimaryContainer,
+                                  fontSize: 20,
+                                ),
                               ),
                             ),
-                            Text(
-                              'Quantity: 2',
-                              style: TextStyle(
-                                color: colorScheme.onSurfaceVariant,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    customerName,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    address,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  if (phone.isNotEmpty)
+                                    Text(
+                                      phone,
+                                      style: TextStyle(
+                                        color: colorScheme.primary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                ],
                               ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        Text(
+                          'Order Details',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('🥛', style: TextStyle(fontSize: 24)),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Milk Delivery',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  'Scheduled: ${delivery['scheduled_date'] ?? 'Today'}',
+                                  style: TextStyle(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Scan instruction
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: colorScheme.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.qr_code_scanner,
+                        size: 64,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Scan QR to Confirm',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Ask the customer to show their QR code to confirm delivery',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () => context.push('/scan/$orderId'),
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text('Open Scanner'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _showIssueDialog(context, delivery),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colorScheme.error,
+                        ),
+                        child: const Text('Report Issue'),
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Scan instruction
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: colorScheme.primary.withOpacity(0.3),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.qr_code_scanner,
-                    size: 64,
-                    color: colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Scan QR to Confirm',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Ask the customer to show their QR code to confirm delivery',
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: () => context.push('/scan/$orderId'),
-                    icon: const Icon(Icons.qr_code_scanner),
-                    label: const Text('Open Scanner'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _showIssueDialog(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colorScheme.error,
-                    ),
-                    child: const Text('Report Issue'),
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      _showManualConfirmDialog(context, delivery, ref);
+                    },
+                    child: const Text('Deliver without QR scan'),
                   ),
                 ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: FilledButton(
-                    onPressed: null, // Disabled until QR scan
-                    child: Text('Mark Delivered'),
-                  ),
-                ),
+                const SizedBox(height: 16),
               ],
             ),
-            const SizedBox(height: 8),
-            Center(
-              child: TextButton(
-                onPressed: () {
-                  // Manual delivery without QR
-                  _showManualConfirmDialog(context);
-                },
-                child: const Text('Deliver without QR scan'),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  void _showIssueDialog(BuildContext context) {
+  void _showIssueDialog(BuildContext context, Map<String, dynamic> delivery) {
     final theme = Theme.of(context);
 
     showModalBottomSheet(
@@ -209,10 +243,10 @@ class DeliveryConfirmScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              _buildIssueOption(context, 'Customer not available'),
-              _buildIssueOption(context, 'Wrong address'),
-              _buildIssueOption(context, 'Customer refused delivery'),
-              _buildIssueOption(context, 'Product damaged'),
+              _buildIssueOption(context, 'Customer not available', delivery),
+              _buildIssueOption(context, 'Wrong address', delivery),
+              _buildIssueOption(context, 'Customer refused delivery', delivery),
+              _buildIssueOption(context, 'Product damaged', delivery),
               const SizedBox(height: 16),
               TextFormField(
                 maxLines: 3,
@@ -223,7 +257,16 @@ class DeliveryConfirmScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: () {
+                onPressed: () async {
+                  // Update delivery status to issue
+                  try {
+                    await SupabaseService.client
+                        .from('deliveries')
+                        .update({'status': 'issue'})
+                        .eq('id', delivery['id']);
+                  } catch (e) {
+                    print('Error reporting issue: $e');
+                  }
                   Navigator.pop(context);
                   context.pop();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -245,7 +288,7 @@ class DeliveryConfirmScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildIssueOption(BuildContext context, String text) {
+  Widget _buildIssueOption(BuildContext context, String text, Map<String, dynamic> delivery) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -258,29 +301,66 @@ class DeliveryConfirmScreen extends StatelessWidget {
     );
   }
 
-  void _showManualConfirmDialog(BuildContext context) {
+  void _showManualConfirmDialog(BuildContext context, Map<String, dynamic> delivery, WidgetRef ref) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Manual Confirmation'),
         content: const Text(
           'Are you sure you want to mark this delivery as complete without QR scan? This should only be done if the customer cannot show their QR code.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.go('/routes');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Delivery marked as complete'),
-                  backgroundColor: AppTheme.successColor,
-                ),
-              );
+            onPressed: () async {
+              // Update delivery status
+              try {
+                await SupabaseService.client
+                    .from('deliveries')
+                    .update({
+                      'status': 'delivered',
+                      'delivered_at': DateTime.now().toIso8601String(),
+                    })
+                    .eq('id', delivery['id']);
+                
+                // Also update the order status
+                final orderId = delivery['order_id'];
+                if (orderId != null) {
+                  await SupabaseService.client
+                      .from('orders')
+                      .update({'status': 'delivered'})
+                      .eq('id', orderId);
+                }
+                
+                // Invalidate providers to refresh dashboard data
+                ref.invalidate(todayDeliveriesProvider);
+                ref.invalidate(deliveryDetailProvider(orderId.toString()));
+                
+              } catch (e) {
+                print('Error updating delivery: $e');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+                return;
+              }
+              Navigator.pop(dialogContext);
+              if (context.mounted) {
+                context.go('/dashboard');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✓ Delivery marked as complete!'),
+                    backgroundColor: AppTheme.successColor,
+                  ),
+                );
+              }
             },
             child: const Text('Confirm'),
           ),

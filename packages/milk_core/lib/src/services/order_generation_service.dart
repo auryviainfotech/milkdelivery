@@ -19,7 +19,7 @@ class OrderGenerationService {
     // 1. Get active subscriptions where end_date >= targetDate
     final subscriptions = await client
         .from('subscriptions')
-        .select('*, profiles!subscriptions_user_id_fkey(id, full_name, address, latitude, longitude)')
+        .select('*, profiles(id, full_name, address, latitude, longitude, assigned_delivery_person_id)')
         .eq('status', 'active')
         .gte('end_date', targetDateStr);
     
@@ -33,12 +33,29 @@ class OrderGenerationService {
         .select('id, full_name, service_pin_codes, qr_code')
         .eq('role', 'delivery');
     
-    // 3. Process each subscription
+    // 3. Get the weekday name for target date (for weekly plan matching)
+    final weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    final targetWeekday = weekdays[targetDate.weekday - 1]; // DateTime weekday is 1-7
+    
+    // 4. Process each subscription
     for (final sub in subscriptions) {
       final userId = sub['user_id'] as String?;
       final profile = sub['profiles'] as Map<String, dynamic>?;
+      final planType = sub['plan_type'] as String? ?? 'daily';
+      final isPaused = sub['is_paused'] as bool? ?? false;
       
       if (userId == null) continue;
+      
+      // Skip paused subscriptions
+      if (isPaused) {
+        print('Skipping paused subscription for user: $userId');
+        continue;
+      }
+      
+      // Check if this subscription should generate an order today based on plan type
+      if (!_shouldGenerateOrder(planType, targetWeekday, sub)) {
+        continue;
+      }
       
       // Check if order already exists for this user and date
       final existingOrder = await client
@@ -49,10 +66,6 @@ class OrderGenerationService {
           .maybeSingle();
       
       if (existingOrder != null) continue; // Skip if order already exists
-      
-      // Extract PIN code from address
-      final address = profile?['address'] as String? ?? '';
-      final customerPinCode = _extractPinCode(address);
       
       // Create order
       final orderResponse = await client
@@ -74,20 +87,36 @@ class OrderGenerationService {
       final quantity = sub['quantity'] as int? ?? 1;
       final price = (sub['total_amount'] as num?)?.toDouble() ?? 0.0;
       
+      // Calculate daily price based on plan type
+      double dailyPrice;
+      switch (planType) {
+        case 'weekly':
+          dailyPrice = price / 7;
+          break;
+        case 'monthly':
+        case 'daily':
+        default:
+          dailyPrice = price / 30;
+      }
+      
       if (productId != null) {
         await client.from('order_items').insert({
           'order_id': orderId,
           'product_id': productId,
           'quantity': quantity,
-          'price': price / 30, // Daily price from monthly total
+          'price': dailyPrice,
         });
       }
       
-      // Find matching delivery person
-      String? assignedPersonId = _findDeliveryPerson(
-        deliveryPersons, 
-        customerPinCode,
-      );
+      // Use assigned delivery person from customer profile (new assignment system)
+      String? assignedPersonId = profile?['assigned_delivery_person_id'] as String?;
+      
+      // Fallback to PIN code matching if no direct assignment
+      if (assignedPersonId == null) {
+        final address = profile?['address'] as String? ?? '';
+        final customerPinCode = _extractPinCode(address);
+        assignedPersonId = _findDeliveryPerson(deliveryPersons, customerPinCode);
+      }
       
       // Create delivery record
       await client.from('deliveries').insert({
@@ -109,6 +138,37 @@ class OrderGenerationService {
       'deliveries_assigned': deliveriesAssigned,
       'unassigned': unassigned,
     };
+  }
+  
+  /// Check if order should be generated based on plan type
+  /// - Daily/Monthly plans: generate every day
+  /// - Weekly plans: only generate on matching weekday(s)
+  static bool _shouldGenerateOrder(String planType, String targetWeekday, Map<String, dynamic> subscription) {
+    switch (planType.toLowerCase()) {
+      case 'daily':
+      case 'monthly':
+        // Daily and Monthly plans generate orders every day
+        return true;
+        
+      case 'weekly':
+        // Weekly plans only generate on specific days
+        // Check if subscription has delivery_days field (e.g., ['monday', 'thursday'])
+        final deliveryDays = subscription['delivery_days'] as List<dynamic>?;
+        
+        if (deliveryDays == null || deliveryDays.isEmpty) {
+          // If no delivery days specified, default to generating on Monday
+          return targetWeekday == 'monday';
+        }
+        
+        // Check if target weekday is in the list of delivery days
+        return deliveryDays.any((day) => 
+          day.toString().toLowerCase() == targetWeekday.toLowerCase()
+        );
+        
+      default:
+        // Unknown plan type - treat as daily
+        return true;
+    }
   }
   
   /// Extract PIN code from address string

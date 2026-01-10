@@ -39,66 +39,79 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),
-          const SizedBox(width: 8),
-          // 10 PM Cutoff indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.warningColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with Generate button
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Icon(Icons.access_time, size: 16, color: AppTheme.warningColor),
-                SizedBox(width: 8),
-                Text(
-                  'Cutoff: 10:00 PM',
-                  style: TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w500),
+                // Cutoff indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warningColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.access_time, size: 16, color: AppTheme.warningColor),
+                      SizedBox(width: 8),
+                      Text(
+                        'Cutoff: 10:00 PM',
+                        style: TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                // GENERATE BUTTON
+                FilledButton.icon(
+                  onPressed: _generateTomorrowOrders,
+                  icon: const Icon(Icons.schedule),
+                  label: const Text('Generate Tomorrow\'s Orders'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 16),
-          FilledButton.icon(
-            onPressed: _generateTomorrowOrders,
-            icon: const Icon(Icons.schedule),
-            label: const Text('Generate Tomorrow\'s Orders'),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
+            const SizedBox(height: 16),
             // Filter chips
-            Row(
+            Wrap(
+              spacing: 8,
               children: [
                 _buildFilterChip('All', 'all'),
-                const SizedBox(width: 8),
                 _buildFilterChip('Active', 'active'),
-                const SizedBox(width: 8),
                 _buildFilterChip('Paused', 'paused'),
-                const SizedBox(width: 8),
                 _buildFilterChip('Expired', 'expired'),
               ],
             ),
             const SizedBox(height: 16),
 
-            // Data table
-            Expanded(
-              child: subscriptionsAsync.when(
-                data: (subscriptions) {
-                  final filtered = _statusFilter == 'all'
-                      ? subscriptions
-                      : subscriptions.where((s) => s['status'] == _statusFilter).toList();
-                  
-                  if (filtered.isEmpty) {
-                    return Center(
+            // Subscriptions list
+            subscriptionsAsync.when(
+              data: (subscriptions) {
+                // Filter logic - check is_paused for paused status
+                final filtered = _statusFilter == 'all'
+                    ? subscriptions
+                    : _statusFilter == 'paused'
+                        ? subscriptions.where((s) => s['is_paused'] == true).toList()
+                        : subscriptions.where((s) => s['status'] == _statusFilter && s['is_paused'] != true).toList();
+                
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(48),
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.inbox_outlined, size: 64, color: colorScheme.onSurfaceVariant),
                           const SizedBox(height: 16),
@@ -108,87 +121,56 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                           ),
                         ],
                       ),
-                    );
-                  }
-                  
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: DataTable2(
-                        columnSpacing: 12,
-                        horizontalMargin: 12,
-                        minWidth: 900,
-                        columns: const [
-                          DataColumn2(label: Text('Customer'), size: ColumnSize.M),
-                          DataColumn2(label: Text('Product'), size: ColumnSize.L),
-                          DataColumn2(label: Text('Plan'), size: ColumnSize.S),
-                          DataColumn2(label: Text('Qty'), size: ColumnSize.S),
-                          DataColumn2(label: Text('Amount'), size: ColumnSize.S),
-                          DataColumn2(label: Text('Period'), size: ColumnSize.M),
-                          DataColumn2(label: Text('Status'), size: ColumnSize.S),
-                          DataColumn2(label: Text('Actions'), size: ColumnSize.M),
-                        ],
-                        rows: filtered.map((sub) {
-                          final profile = sub['profiles'] as Map<String, dynamic>?;
-                          final customerName = profile?['full_name'] ?? 'Unknown';
-                          final startDate = sub['start_date'] != null 
-                              ? DateFormat('dd MMM').format(DateTime.parse(sub['start_date']))
-                              : '-';
-                          final endDate = sub['end_date'] != null 
-                              ? DateFormat('dd MMM yyyy').format(DateTime.parse(sub['end_date']))
-                              : '-';
-                          
-                          return DataRow2(
-                            cells: [
-                              DataCell(Text(customerName, style: const TextStyle(fontWeight: FontWeight.w500))),
-                              DataCell(Text(_getProductName(sub['product_id']))),
-                              DataCell(Text(sub['plan_type'] ?? '-')),
-                              DataCell(Text('${sub['quantity'] ?? 1}')),
-                              DataCell(Text('₹${(sub['total_amount'] ?? 0).toStringAsFixed(0)}')),
-                              DataCell(
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(startDate, style: const TextStyle(fontSize: 12)),
-                                    Text('to $endDate', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
-                                  ],
-                                ),
-                              ),
-                              DataCell(_buildStatusChip(sub['status'] ?? 'active')),
-                              DataCell(
-                                Row(
-                                  children: [
-                                    if (sub['status'] == 'active')
-                                      IconButton(
-                                        onPressed: () => _pauseSubscription(sub),
-                                        icon: const Icon(Icons.pause_outlined),
-                                        tooltip: 'Pause',
-                                      ),
-                                    if (sub['status'] == 'paused')
-                                      IconButton(
-                                        onPressed: () => _resumeSubscription(sub),
-                                        icon: const Icon(Icons.play_arrow_outlined),
-                                        tooltip: 'Resume',
-                                      ),
-                                    IconButton(
-                                      onPressed: () => _viewDetails(sub, profile),
-                                      icon: const Icon(Icons.visibility_outlined),
-                                      tooltip: 'View',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
                     ),
                   );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
-              ),
+                }
+                
+                return Column(
+                  children: filtered.map((sub) {
+                    final profile = sub['profiles'] as Map<String, dynamic>?;
+                    final customerName = profile?['full_name'] ?? 'Unknown Customer';
+                    final startDate = sub['start_date'] != null 
+                        ? DateFormat('dd MMM yyyy').format(DateTime.parse(sub['start_date']))
+                        : '-';
+                    final endDate = sub['end_date'] != null 
+                        ? DateFormat('dd MMM yyyy').format(DateTime.parse(sub['end_date']))
+                        : '-';
+                    final isPaused = sub['is_paused'] == true;
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: isPaused ? Colors.orange.shade100 : colorScheme.primaryContainer,
+                          child: isPaused 
+                              ? const Icon(Icons.pause, color: Colors.orange)
+                              : Text(customerName[0].toUpperCase()),
+                        ),
+                        title: Text(customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${_getProductName(sub['product_id'])} • ${sub['plan_type'] ?? 'daily'} • Qty: ${sub['quantity'] ?? 1}'),
+                            Text('$startDate to $endDate', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildStatusChip(isPaused ? 'paused' : (sub['status'] ?? 'active')),
+                            const SizedBox(width: 8),
+                            Text('₹${(sub['total_amount'] ?? 0).toStringAsFixed(0)}', 
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          ],
+                        ),
+                        onTap: () => _viewDetails(sub, profile),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+              loading: () => const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator())),
+              error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ],
         ),

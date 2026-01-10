@@ -28,20 +28,56 @@ final deliveryProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) asyn
 /// Provider for today's deliveries assigned to this delivery person
 final todayDeliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final personId = await ref.watch(deliveryPersonIdProvider.future);
-  if (personId == null) return [];
+  print('DEBUG: Delivery Person ID from prefs: $personId');
+  
+  if (personId == null) {
+    print('DEBUG: No Person ID found! Returning empty.');
+    return [];
+  }
   
   final today = DateTime.now();
   final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+  print('DEBUG: Fetching orders for date: $todayStr');
   
-  // Get deliveries for today assigned to this delivery person
-  final response = await SupabaseService.client
-      .from('deliveries')
-      .select('*, orders(*, profiles(full_name, address, phone))')
-      .eq('delivery_person_id', personId)
-      .eq('scheduled_date', todayStr)
-      .order('created_at');
-  
-  return List<Map<String, dynamic>>.from(response);
+  try {
+    // Get orders for today where the customer is assigned to this delivery person
+    // Include subscription to get delivery_slot
+    final response = await SupabaseService.client
+        .from('orders')
+        .select('*, profiles!orders_user_id_fkey(id, full_name, address, phone, assigned_delivery_person_id), subscriptions!orders_subscription_id_fkey(delivery_slot)')
+        .eq('delivery_date', todayStr)
+        .order('created_at');
+    
+    // Filter to only orders where customer is assigned to this delivery person
+    final filteredOrders = (response as List).where((order) {
+      final profile = order['profiles'];
+      if (profile == null) return false;
+      return profile['assigned_delivery_person_id'] == personId;
+    }).toList();
+    
+    // Sort by time slot (morning first, then evening)
+    filteredOrders.sort((a, b) {
+      final slotA = a['subscriptions']?['delivery_slot'] ?? 'morning';
+      final slotB = b['subscriptions']?['delivery_slot'] ?? 'morning';
+      return slotA.compareTo(slotB);
+    });
+        
+    print('DEBUG: Fetched ${filteredOrders.length} orders for assigned customers');
+    
+    // Transform to the expected format (matching old deliveries structure)
+    return filteredOrders.map((order) => <String, dynamic>{
+      'id': order['id'],
+      'order_id': order['id'],
+      'status': order['status'] ?? 'pending',
+      'delivered_at': order['delivered_at'],
+      'delivery_slot': order['subscriptions']?['delivery_slot'] ?? 'morning',
+      'orders': order, // Nest the order for compatibility
+    }).toList();
+  } catch (e, stack) {
+    print('DEBUG: Error fetching orders: $e');
+    print(stack);
+    return [];
+  }
 });
 
 /// Delivery personnel dashboard with real data
@@ -61,115 +97,153 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     final deliveriesAsync = ref.watch(todayDeliveriesProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _getGreeting(),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            profileAsync.when(
-              data: (profile) => Text(profile?['full_name'] ?? 'Delivery Person'),
-              loading: () => const Text('Loading...'),
-              error: (_, __) => const Text('Delivery Person'),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: () => ref.invalidate(todayDeliveriesProvider),
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
-          ),
-          IconButton(
-            onPressed: () async {
-              // Clear saved profile data
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('delivery_person_id');
-              await prefs.remove('delivery_person_name');
-              if (context.mounted) context.go('/login');
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(todayDeliveriesProvider);
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Today's summary cards
-              deliveriesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Error: $e')),
-                data: (deliveries) {
-                  final completed = deliveries.where((d) => d['status'] == 'delivered').length;
-                  final pending = deliveries.where((d) => d['status'] == 'pending' || d['status'] == 'in_transit').length;
-                  final issues = deliveries.where((d) => d['status'] == 'issue').length;
-                  
-                  return Column(
+      backgroundColor: colorScheme.surface,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(todayDeliveriesProvider);
+            ref.invalidate(deliveryProfileProvider);
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // Modern Header
+                SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    // Decoration removed for clean look
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Stats Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildSummaryCard(
-                              context,
-                              icon: Icons.check_circle,
-                              iconColor: AppTheme.successColor,
-                              value: '$completed',
-                              label: 'Completed',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildSummaryCard(
-                              context,
-                              icon: Icons.pending,
-                              iconColor: AppTheme.pendingColor,
-                              value: '$pending',
-                              label: 'Pending',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildSummaryCard(
-                              context,
-                              icon: Icons.warning,
-                              iconColor: AppTheme.warningColor,
-                              value: '$issues',
-                              label: 'Issues',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Deliveries Header
+                      // Top row with actions
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            "Today's Deliveries",
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                          // Greeting Section
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _getGreeting(),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              profileAsync.when(
+                                data: (profile) => Text(
+                                  profile?['full_name'] ?? 'Delivery Person',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: colorScheme.onSurface,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                loading: () => Text(
+                                  'Loading...',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                error: (_, __) => Text(
+                                  'Delivery Person',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: colorScheme.onSurface,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            '${deliveries.length} total',
-                            style: TextStyle(color: colorScheme.onSurfaceVariant),
+                          // Action buttons
+                          Row(
+                            children: [
+                              IconButton.filledTonal(
+                                onPressed: () => ref.invalidate(todayDeliveriesProvider),
+                                icon: Icon(Icons.refresh, size: 20, color: colorScheme.onSurfaceVariant),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: colorScheme.surfaceContainerHighest,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                onPressed: () async {
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.remove('delivery_person_id');
+                                  await prefs.remove('delivery_person_name');
+                                  if (context.mounted) context.go('/login');
+                                },
+                                icon: Icon(Icons.logout, size: 20, color: colorScheme.onSurfaceVariant),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: colorScheme.surfaceContainerHighest,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
+                      // Stats Cards Row
+                      deliveriesAsync.when(
+                        loading: () => const SizedBox(height: 60),
+                        error: (_, __) => const SizedBox(height: 60),
+                        data: (deliveries) {
+                          final completed = deliveries.where((d) => d['status'] == 'delivered').length;
+                          final pending = deliveries.where((d) => d['status'] == 'pending' || d['status'] == 'in_transit').length;
+                          final total = deliveries.length;
+                          
+                          return Row(
+                            children: [
+                              _buildStatCard('$total', 'Total', Icons.local_shipping, Colors.white),
+                              const SizedBox(width: 8),
+                              _buildStatCard('$pending', 'Pending', Icons.pending_actions, Colors.amber),
+                              const SizedBox(width: 8),
+                              _buildStatCard('$completed', 'Done', Icons.check_circle, Colors.greenAccent),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Content Section
+              SliverPadding(
+                padding: const EdgeInsets.all(20),
+                sliver: SliverToBoxAdapter(
+                  child: deliveriesAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
+                    data: (deliveries) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Section Header
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Today's Deliveries",
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${deliveries.length} orders',
+                                  style: TextStyle(
+                                    color: colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
                       
                       // Delivery Cards
                       if (deliveries.isEmpty)
@@ -192,13 +266,40 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                         )
                       else
                         ...deliveries.map((delivery) => _buildDeliveryCard(context, delivery)),
-                    ],
-                  );
-                },
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ),
             ],
           ),
         ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
+          switch (index) {
+            case 0:
+              // Already on Dashboard
+              break;
+            case 1:
+              context.push('/routes');
+              break;
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.route_outlined),
+            selectedIcon: Icon(Icons.route),
+            label: 'Routes',
+          ),
+        ],
       ),
     );
   }
@@ -208,6 +309,56 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     if (hour < 12) return 'Good Morning! ☀️';
     if (hour < 17) return 'Good Afternoon! 🌤️';
     return 'Good Evening! 🌙';
+  }
+
+  Widget _buildStatCard(String value, String label, IconData icon, Color color) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              colorScheme.primary,
+              colorScheme.primary.withOpacity(0.8),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.primary.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildSummaryCard(
@@ -250,6 +401,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     final colorScheme = theme.colorScheme;
     final status = delivery['status'] ?? 'pending';
     final isDelivered = status == 'delivered';
+    final deliverySlot = delivery['delivery_slot'] ?? 'morning';
+    final isMorning = deliverySlot == 'morning';
     
     // Get customer info from nested order/profile
     final order = delivery['orders'] as Map<String, dynamic>?;
@@ -259,9 +412,27 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     final phone = customer?['phone'] ?? '';
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: isDelivered ? 0 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: isDelivered 
+            ? BorderSide(color: AppTheme.successColor.withOpacity(0.3), width: 1)
+            : BorderSide.none,
+      ),
+      child: Container(
+        decoration: isDelivered ? null : BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              colorScheme.surface,
+              colorScheme.surface.withOpacity(0.95),
+            ],
+          ),
+        ),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -306,16 +477,36 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                     ],
                   ),
                 ),
-                // Call Button
-                if (phone.isNotEmpty)
-                  IconButton(
-                    onPressed: () => _makeCall(phone),
-                    icon: Icon(Icons.phone, color: colorScheme.primary),
-                    tooltip: 'Call Customer',
-                    style: IconButton.styleFrom(
-                      backgroundColor: colorScheme.primaryContainer,
-                    ),
+                const SizedBox(width: 4),
+                // Time Slot Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isMorning 
+                        ? Colors.amber.withOpacity(0.1)
+                        : Colors.indigo.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isMorning ? Icons.wb_sunny : Icons.nights_stay,
+                        size: 12,
+                        color: isMorning ? Colors.amber.shade700 : Colors.indigo,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isMorning ? 'AM' : 'PM',
+                        style: TextStyle(
+                          color: isMorning ? Colors.amber.shade700 : Colors.indigo,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 4),
                 // Status Badge
                 Container(
@@ -356,36 +547,70 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
             ),
             const SizedBox(height: 16),
             
-            // Action Buttons
+            // Action Buttons - Better layout
             if (!isDelivered)
-              Row(
+              Column(
                 children: [
-                  // Navigate Button
-                  if (address.isNotEmpty && address != 'Address not available')
-                    IconButton.filledTonal(
-                      onPressed: () => _openMaps(address),
-                      icon: const Icon(Icons.navigation),
-                      tooltip: 'Navigate',
-                    ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _reportIssue(delivery),
-                      icon: const Icon(Icons.warning_amber, size: 18),
-                      label: const Text('Report Issue'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.warningColor,
-                      ),
-                    ),
+                  // First row: Quick actions (Navigate + Call)
+                  Row(
+                    children: [
+                      // Navigate Button
+                      if (address.isNotEmpty && address != 'Address not available')
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: () => _openMaps(address),
+                            icon: const Icon(Icons.navigation, size: 20),
+                            label: const Text('Navigate'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      if (address.isNotEmpty && address != 'Address not available')
+                        const SizedBox(width: 12),
+                      // Call Button  
+                      if (phone.isNotEmpty)
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: () => _makeCall(phone),
+                            icon: const Icon(Icons.phone, size: 20),
+                            label: const Text('Call'),
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton.icon(
-                      onPressed: () => _markAsDelivered(delivery),
-                      icon: const Icon(Icons.check_circle, size: 18),
-                      label: const Text('Mark Delivered'),
-                    ),
+                  const SizedBox(height: 12),
+                  // Second row: Main actions
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _reportIssue(delivery),
+                          icon: const Icon(Icons.warning_amber, size: 18),
+                          label: const Text('Issue'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.warningColor,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton.icon(
+                          onPressed: () => context.push('/delivery/${delivery['id']}'),
+                          icon: const Icon(Icons.qr_code_scanner, size: 20),
+                          label: const Text('Scan & Deliver'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: AppTheme.successColor,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -94,7 +94,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                                   color: colorScheme.primaryContainer,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Text('🥛', style: TextStyle(fontSize: 16)),
+                                child: Text(product['emoji'] ?? '🥛', style: const TextStyle(fontSize: 16)),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -170,6 +170,11 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           error: (e, _) => Center(child: Text('Error: $e')),
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showProductDialog(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Add Product'),
+      ),
     );
   }
 
@@ -178,100 +183,176 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final nameController = TextEditingController(text: product?['name'] ?? '');
     final descController = TextEditingController(text: product?['description'] ?? '');
     final priceController = TextEditingController(text: product?['price']?.toString() ?? '');
-    final unitController = TextEditingController(text: product?['unit'] ?? '');
+    final unitController = TextEditingController(text: product?['unit'] ?? '500ml');
+    String selectedEmoji = product?['emoji'] ?? '🥛';
+    bool isLoading = false;
+    String? errorMessage;
+    
+    // Available milk emojis
+    const emojis = ['🥛', '🍼', '🧴', '🦬', '🐄', '🐮'];
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isEdit ? 'Edit Product' : 'Add Product'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Product Name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: priceController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Price (₹)',
-                        border: OutlineInputBorder(),
-                      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(isEdit ? 'Edit Product' : 'Add Product'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Emoji picker
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Product Icon:', style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: emojis.map((emoji) => GestureDetector(
+                        onTap: () => setState(() => selectedEmoji = emoji),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: selectedEmoji == emoji ? Theme.of(context).colorScheme.primaryContainer : null,
+                            border: Border.all(
+                              color: selectedEmoji == emoji ? Theme.of(context).colorScheme.primary : Colors.grey.shade300,
+                              width: selectedEmoji == emoji ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                        ),
+                      )).toList(),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Product Name *',
+                    border: OutlineInputBorder(),
+                    hintText: 'e.g., Full Cream Milk',
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: unitController,
-                      decoration: const InputDecoration(
-                        labelText: 'Unit',
-                        border: OutlineInputBorder(),
-                        hintText: 'e.g., 500ml, 1L',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
+                    hintText: 'e.g., Rich & creamy, 6% fat',
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: priceController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Price (₹) *',
+                          border: OutlineInputBorder(),
+                          hintText: '35',
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: unitController,
+                        decoration: const InputDecoration(
+                          labelText: 'Unit',
+                          border: OutlineInputBorder(),
+                          hintText: '500ml',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    errorMessage!,
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ],
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: isLoading ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: isLoading ? null : () async {
+                // Validation
+                if (nameController.text.trim().isEmpty) {
+                  setState(() => errorMessage = 'Product name is required');
+                  return;
+                }
+                final price = double.tryParse(priceController.text);
+                if (price == null || price <= 0) {
+                  setState(() => errorMessage = 'Valid price is required');
+                  return;
+                }
+                
+                setState(() {
+                  isLoading = true;
+                  errorMessage = null;
+                });
+                
+                try {
+                  final data = {
+                    'name': nameController.text.trim(),
+                    'description': descController.text.trim(),
+                    'price': price,
+                    'unit': unitController.text.trim().isEmpty ? '500ml' : unitController.text.trim(),
+                    'emoji': selectedEmoji,
+                    'is_active': true,
+                  };
+                  
+                  if (isEdit) {
+                    await SupabaseService.client
+                        .from('products')
+                        .update(data)
+                        .eq('id', product['id']);
+                  } else {
+                    await SupabaseService.client
+                        .from('products')
+                        .insert(data);
+                  }
+                  
+                  ref.invalidate(productsProvider);
+                  
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(isEdit ? 'Product updated!' : 'Product added!'),
+                        backgroundColor: AppTheme.successColor,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setState(() {
+                    isLoading = false;
+                    errorMessage = 'Error: ${e.toString()}';
+                  });
+                  print('Product save error: $e');
+                }
+              },
+              child: isLoading 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(isEdit ? 'Update' : 'Add'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final data = {
-                'name': nameController.text.trim(),
-                'description': descController.text.trim(),
-                'price': double.tryParse(priceController.text) ?? 0,
-                'unit': unitController.text.trim(),
-                'is_active': true,
-              };
-              
-              if (isEdit) {
-                await SupabaseService.client
-                    .from('products')
-                    .update(data)
-                    .eq('id', product['id']);
-              } else {
-                await SupabaseService.client
-                    .from('products')
-                    .insert(data);
-              }
-              
-              ref.invalidate(productsProvider);
-              
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(isEdit ? 'Product updated' : 'Product added')),
-                );
-              }
-            },
-            child: Text(isEdit ? 'Update' : 'Add'),
-          ),
-        ],
       ),
     );
   }

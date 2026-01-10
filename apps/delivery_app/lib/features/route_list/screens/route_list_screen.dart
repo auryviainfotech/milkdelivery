@@ -3,51 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../dashboard/screens/delivery_dashboard_screen.dart'; // Import shared provider
 
-/// Provider for today's deliveries from Supabase
-final deliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final today = DateTime.now();
-  final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-  
-  // Fetch active subscriptions with user profiles
-  final response = await SupabaseService.client
-      .from('subscriptions')
-      .select('''
-        id,
-        product_id,
-        plan_type,
-        quantity,
-        status,
-        total_amount,
-        profiles!inner(id, full_name, phone, address)
-      ''')
-      .eq('status', 'active');
-
-  // Map product IDs to names
-  const productNames = {
-    '1': 'Full Cream Milk 500ml',
-    '2': 'Toned Milk 500ml',
-    '3': 'Double Toned Milk 500ml',
-    '4': 'Buffalo Milk 500ml',
-  };
-
-  final deliveries = (response as List).map((sub) {
-    final profile = sub['profiles'];
-    return {
-      'id': sub['id'],
-      'name': profile['full_name'] ?? 'Customer',
-      'phone': profile['phone'] ?? '',
-      'address': profile['address'] ?? 'Address not provided',
-      'product': '${productNames[sub['product_id']] ?? 'Milk'} × ${sub['quantity']}',
-      'plan': sub['plan_type'],
-      'status': 'pending',
-    };
-  }).toList();
-
-  return deliveries;
-});
-
-/// Today's route list screen - Fetches from Supabase
+/// Today's route list screen - Uses shared provider with Dashboard for sync
 class RouteListScreen extends ConsumerWidget {
   const RouteListScreen({super.key});
 
@@ -77,7 +36,8 @@ class RouteListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final deliveriesAsync = ref.watch(deliveriesProvider);
+    // Use shared provider from dashboard for auto-sync
+    final deliveriesAsync = ref.watch(todayDeliveriesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -119,9 +79,26 @@ class RouteListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDeliveryList(BuildContext context, List<Map<String, dynamic>> deliveries) {
+  Widget _buildDeliveryList(BuildContext context, List<Map<String, dynamic>> rawDeliveries) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    
+    // Transform raw Supabase data to flat format for cards
+    final deliveries = rawDeliveries.map((delivery) {
+      final order = delivery['orders'] as Map<String, dynamic>?;
+      final profile = order?['profiles'] as Map<String, dynamic>?;
+      
+      return {
+        'id': delivery['id'],
+        'name': profile?['full_name'] ?? 'Customer',
+        'phone': profile?['phone'] ?? '',
+        'address': profile?['address'] ?? 'Address not provided',
+        'product': 'Milk Delivery',
+        'status': delivery['status'] ?? 'pending',
+        'scheduled_date': delivery['scheduled_date'],
+        'plan': 'daily', // Default plan
+      };
+    }).toList();
     
     final pendingCount = deliveries.where((d) => d['status'] == 'pending').length;
 
@@ -169,12 +146,13 @@ class RouteListScreen extends ConsumerWidget {
             itemCount: deliveries.length,
             itemBuilder: (context, index) {
               final delivery = deliveries[index];
+              final isDelivered = delivery['status'] == 'delivered';
               return _DeliveryCard(
                 delivery: delivery,
                 index: index + 1,
-                onCall: () => _makeCall(delivery['phone']),
-                onNavigate: () => _openMaps(delivery['address']),
-                onConfirm: () => context.push('/delivery/${delivery['id']}'),
+                onCall: () => _makeCall(delivery['phone'] ?? ''),
+                onNavigate: () => _openMaps(delivery['address'] ?? ''),
+                onConfirm: isDelivered ? null : () => context.push('/delivery/${delivery['id']}'),
               );
             },
           ),
@@ -205,23 +183,25 @@ class _DeliveryCard extends StatelessWidget {
   final int index;
   final VoidCallback onCall;
   final VoidCallback onNavigate;
-  final VoidCallback onConfirm;
+  final VoidCallback? onConfirm; // Nullable for delivered items
 
   const _DeliveryCard({
     required this.delivery,
     required this.index,
     required this.onCall,
     required this.onNavigate,
-    required this.onConfirm,
+    this.onConfirm,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDelivered = delivery['status'] == 'delivered';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: isDelivered ? AppTheme.successColor.withOpacity(0.1) : null,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -231,12 +211,14 @@ class _DeliveryCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: colorScheme.primary,
+                  backgroundColor: isDelivered ? AppTheme.successColor : colorScheme.primary,
                   radius: 16,
-                  child: Text(
-                    '$index',
-                    style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
-                  ),
+                  child: isDelivered 
+                      ? const Icon(Icons.check, color: Colors.white, size: 18)
+                      : Text(
+                          '$index',
+                          style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -244,27 +226,27 @@ class _DeliveryCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        delivery['name'],
+                        delivery['name'] ?? 'Customer',
                         style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        delivery['phone'],
+                        delivery['phone'] ?? '',
                         style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
                 ),
-                // Plan badge
+                // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: colorScheme.secondaryContainer,
+                    color: isDelivered ? AppTheme.successColor : colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    delivery['plan']?.toString().toUpperCase() ?? 'DAILY',
+                    isDelivered ? 'DELIVERED' : (delivery['plan']?.toString().toUpperCase() ?? 'DAILY'),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSecondaryContainer,
+                      color: isDelivered ? Colors.white : colorScheme.onSecondaryContainer,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -281,7 +263,7 @@ class _DeliveryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    delivery['address'],
+                    delivery['address'] ?? 'Address not provided',
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -296,7 +278,7 @@ class _DeliveryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    delivery['product'],
+                    delivery['product'] ?? 'Milk Delivery',
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -322,10 +304,20 @@ class _DeliveryCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: FilledButton(
-                    onPressed: onConfirm,
-                    child: const Text('Confirm'),
-                  ),
+                  child: isDelivered
+                      ? FilledButton.icon(
+                          onPressed: null,
+                          icon: const Icon(Icons.check),
+                          label: const Text('Done'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.successColor,
+                            disabledBackgroundColor: AppTheme.successColor.withOpacity(0.5),
+                          ),
+                        )
+                      : FilledButton(
+                          onPressed: onConfirm,
+                          child: const Text('Confirm'),
+                        ),
                 ),
               ],
             ),

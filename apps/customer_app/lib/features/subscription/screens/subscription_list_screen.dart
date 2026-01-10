@@ -8,41 +8,8 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../services/razorpay_service.dart';
 import '../../../shared/providers/auth_providers.dart';
 
-/// 4 Hardcoded milk products
-final List<Map<String, dynamic>> _products = [
-  {
-    'id': '1',
-    'name': 'Full Cream Milk',
-    'price': 35.0,
-    'unit': '500ml',
-    'emoji': '🥛',
-    'description': 'Rich & creamy, 6% fat content',
-  },
-  {
-    'id': '2',
-    'name': 'Toned Milk',
-    'price': 30.0,
-    'unit': '500ml',
-    'emoji': '🥛',
-    'description': 'Balanced nutrition, 3% fat content',
-  },
-  {
-    'id': '3',
-    'name': 'Double Toned Milk',
-    'price': 28.0,
-    'unit': '500ml',
-    'emoji': '🥛',
-    'description': 'Light & healthy, 1.5% fat content',
-  },
-  {
-    'id': '4',
-    'name': 'Buffalo Milk',
-    'price': 45.0,
-    'unit': '500ml',
-    'emoji': '🦬',
-    'description': 'Premium quality, high protein',
-  },
-];
+// Products are now fetched dynamically from Supabase via productsProvider
+// Admin can add/edit/delete products in the Admin Panel
 
 /// Subscription list and new subscription screen
 class SubscriptionListScreen extends ConsumerStatefulWidget {
@@ -57,6 +24,20 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
   String _selectedPlan = 'daily';
   int _quantity = 1;
   bool _isProcessing = false;
+  
+  // Cutoff time for new subscriptions (10 PM)
+  static const int cutoffHour = 22;
+  
+  bool get _isAfterCutoff => DateTime.now().hour >= cutoffHour;
+  
+  // Delivery days - skip weekends option
+  bool _skipWeekends = false;
+  
+  // Delivery time slot (morning/evening)
+  String _selectedTimeSlot = 'morning';
+  
+  // Products fetched from Supabase (converted to Map format for UI compatibility)
+  List<Map<String, dynamic>> _products = [];
   
   // Razorpay payment tracking
   Map<String, dynamic>? _pendingPaymentData;
@@ -206,51 +187,117 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    
+    // Watch products from Supabase
+    final productsAsync = ref.watch(productsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Subscribe to Milk'),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+      body: productsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error loading products: $e')),
+        data: (productModels) {
+          // Convert ProductModel list to Map format for UI compatibility
+          _products = productModels.map((p) => <String, dynamic>{
+            'id': p.id,
+            'name': p.name,
+            'price': p.price,
+            'unit': p.unit ?? '500ml',
+            'emoji': p.emoji,
+            'description': p.description ?? '',
+          }).toList();
+          
+          if (_products.isEmpty) {
+            return Center(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Product selection
-                  Text(
-                    'Select Product',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.85,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: _products.length,
-                    itemBuilder: (context, index) {
-                      final product = _products[index];
-                      final isSelected = _selectedProductId == product['id'];
-                      return _buildProductCard(product, isSelected);
-                    },
-                  ),
-                  const SizedBox(height: 24),
+                  Icon(Icons.inventory_2_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(height: 16),
+                  Text('No products available', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  Text('Admin needs to add products first', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12)),
+                ],
+              ),
+            );
+          }
+          
+          return Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 10 PM Cutoff Banner
+                      if (_isAfterCutoff)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.access_time, color: Colors.orange),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Orders closed for tomorrow',
+                                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      'Cutoff time is 10 PM. New subscriptions will start day after tomorrow.',
+                                      style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      
+                      // Product selection
+                      Text(
+                        'Select Product',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.85,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: _products.length,
+                        itemBuilder: (context, index) {
+                          final product = _products[index];
+                          final isSelected = _selectedProductId == product['id'];
+                          return _buildProductCard(product, isSelected);
+                        },
+                      ),
+                      const SizedBox(height: 24),
 
-                  // Quantity selector
-                  if (_selectedProductId != null) ...[
-                    Text(
-                      'Quantity (per delivery)',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      // Quantity selector
+                      if (_selectedProductId != null) ...[
+                        Text(
+                          'Quantity (per delivery)',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -305,6 +352,147 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
                         _buildPlanChip('weekly', 'Weekly'),
                         const SizedBox(width: 8),
                         _buildPlanChip('monthly', 'Monthly'),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Skip weekends toggle
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.weekend, color: colorScheme.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Skip Weekends', style: TextStyle(fontWeight: FontWeight.w600)),
+                                Text(
+                                  'No delivery on Saturday & Sunday',
+                                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _skipWeekends,
+                            onChanged: (v) => setState(() => _skipWeekends = v),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Time slot selector
+                    Text(
+                      'Delivery Time',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTimeSlot = 'morning'),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _selectedTimeSlot == 'morning' 
+                                    ? colorScheme.primaryContainer 
+                                    : colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedTimeSlot == 'morning' 
+                                      ? colorScheme.primary 
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.wb_sunny,
+                                    color: _selectedTimeSlot == 'morning' 
+                                        ? colorScheme.primary 
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Morning',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: _selectedTimeSlot == 'morning' 
+                                          ? colorScheme.primary 
+                                          : null,
+                                    ),
+                                  ),
+                                  Text(
+                                    '6:00 - 8:00 AM',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTimeSlot = 'evening'),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _selectedTimeSlot == 'evening' 
+                                    ? colorScheme.primaryContainer 
+                                    : colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedTimeSlot == 'evening' 
+                                      ? colorScheme.primary 
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.nights_stay,
+                                    color: _selectedTimeSlot == 'evening' 
+                                        ? colorScheme.primary 
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Evening',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: _selectedTimeSlot == 'evening' 
+                                          ? colorScheme.primary 
+                                          : null,
+                                    ),
+                                  ),
+                                  Text(
+                                    '5:00 - 7:00 PM',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -372,6 +560,8 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
               ),
             ),
         ],
+      );
+        },
       ),
     );
   }
@@ -958,6 +1148,12 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
         ? startDate.add(const Duration(days: 7))
         : startDate.add(const Duration(days: 30));
 
+    // Calculate delivery days based on skip weekends toggle
+    List<String>? deliveryDays;
+    if (_skipWeekends) {
+      deliveryDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    }
+
     await SupabaseService.client.from('subscriptions').insert({
       'user_id': user.id,
       'product_id': product['id'],
@@ -967,6 +1163,8 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
       'end_date': endDate.toIso8601String(),
       'status': 'active',
       'total_amount': _totalPrice,
+      'delivery_slot': _selectedTimeSlot,
+      if (deliveryDays != null) 'delivery_days': deliveryDays,
     });
     
     // Refresh user profile provider so profile screen shows updated address
