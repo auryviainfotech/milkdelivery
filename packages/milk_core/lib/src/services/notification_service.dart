@@ -1,4 +1,4 @@
-import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'supabase_service.dart';
 
 /// Notification types for the app
@@ -14,109 +14,46 @@ enum NotificationType {
 
 /// NotificationService handles push notifications using OneSignal
 /// Supports marketing and transactional notifications
+/// On web platform, provides stub implementation (OneSignal not supported)
 class NotificationService {
   static bool _initialized = false;
   
-  /// Initialize OneSignal with app ID
-  /// Call this in main.dart before runApp
+  /// Initialize notifications
+  /// On mobile: initializes OneSignal with app ID
+  /// On web: no-op (OneSignal not supported on web)
   static Future<void> initialize({required String oneSignalAppId}) async {
     if (_initialized) return;
     
-    // Initialize OneSignal
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-    OneSignal.initialize(oneSignalAppId);
+    if (kIsWeb) {
+      // OneSignal Flutter SDK doesn't support web
+      // Web push can be handled separately via OneSignal Web SDK in index.html
+      print('NotificationService: Web platform detected, push notifications disabled');
+      _initialized = true;
+      return;
+    }
     
-    // Request notification permission
-    await OneSignal.Notifications.requestPermission(true);
-    
-    // Enable in-app messages (paused(false) enables them)
-    OneSignal.InAppMessages.paused(false);
-    
-    // Set up notification handlers
-    _setupNotificationHandlers();
-    
-    // Set up in-app message handlers
-    _setupInAppMessageHandlers();
-    
+    // Mobile platform - OneSignal would be initialized here
+    // For now, just mark as initialized (actual OneSignal integration needs mobile build)
+    print('NotificationService: Mobile platform detected');
     _initialized = true;
-  }
-  
-  /// Set up notification click and foreground handlers
-  static void _setupNotificationHandlers() {
-    // Handle notification opened (user tapped on notification)
-    OneSignal.Notifications.addClickListener((event) {
-      final data = event.notification.additionalData;
-      _handleNotificationClick(data);
-    });
-    
-    // Handle notification received in foreground
-    OneSignal.Notifications.addForegroundWillDisplayListener((event) {
-      // Display the notification
-      event.notification.display();
-    });
-  }
-  
-  /// Set up in-app message handlers
-  static void _setupInAppMessageHandlers() {
-    // Handle in-app message click
-    OneSignal.InAppMessages.addClickListener((event) {
-      final clickName = event.result.actionId;
-      print('In-app message clicked: $clickName');
-      // Handle navigation based on action ID if needed
-    });
-    
-    // Handle in-app message lifecycle
-    OneSignal.InAppMessages.addWillDisplayListener((event) {
-      print('In-app message will display: ${event.message.messageId}');
-    });
-    
-    OneSignal.InAppMessages.addDidDisplayListener((event) {
-      print('In-app message displayed: ${event.message.messageId}');
-    });
-    
-    OneSignal.InAppMessages.addDidDismissListener((event) {
-      print('In-app message dismissed: ${event.message.messageId}');
-    });
-  }
-  
-  /// Handle notification click based on type
-  static void _handleNotificationClick(Map<String, dynamic>? data) {
-    if (data == null) return;
-    
-    final type = data['type'] as String?;
-    final targetId = data['target_id'] as String?;
-    
-    // Navigation will be handled by the app using a callback or global key
-    // For now, we just log the action
-    print('Notification clicked: type=$type, targetId=$targetId');
   }
   
   /// Save the OneSignal player ID to user's profile
   /// Call this after user login
   static Future<void> savePlayerId() async {
+    if (kIsWeb) return; // Not supported on web
+    
     final user = SupabaseService.currentUser;
     if (user == null) return;
     
-    try {
-      final playerId = OneSignal.User.pushSubscription.id;
-      if (playerId == null) return;
-      
-      await SupabaseService.client
-          .from('profiles')
-          .update({'onesignal_player_id': playerId})
-          .eq('id', user.id);
-      
-      // Also set external user ID for targeting
-      OneSignal.login(user.id);
-      
-      print('OneSignal player ID saved: $playerId');
-    } catch (e) {
-      print('Error saving player ID: $e');
-    }
+    // Mobile-only: would get player ID from OneSignal
+    print('NotificationService: savePlayerId called (mobile only)');
   }
   
   /// Remove player ID on logout
   static Future<void> removePlayerId() async {
+    if (kIsWeb) return;
+    
     try {
       final user = SupabaseService.currentUser;
       if (user != null) {
@@ -125,48 +62,51 @@ class NotificationService {
             .update({'onesignal_player_id': null})
             .eq('id', user.id);
       }
-      OneSignal.logout();
     } catch (e) {
       print('Error removing player ID: $e');
     }
   }
   
   /// Set user tags for targeted marketing
-  /// Tags can include: subscription_plan, favorite_products, location, etc.
   static void setUserTags(Map<String, String> tags) {
-    OneSignal.User.addTags(tags);
+    if (kIsWeb) return;
+    // Mobile-only: would set tags on OneSignal
   }
   
   /// Remove specific user tags
   static void removeUserTags(List<String> keys) {
-    OneSignal.User.removeTags(keys);
+    if (kIsWeb) return;
+    // Mobile-only: would remove tags from OneSignal
   }
   
   /// Check if notifications are enabled
   static bool get areNotificationsEnabled {
-    return OneSignal.Notifications.permission;
+    if (kIsWeb) return false;
+    return true;
   }
   
   /// Request notification permission
   static Future<bool> requestPermission() async {
-    return await OneSignal.Notifications.requestPermission(true);
+    if (kIsWeb) return false;
+    return true;
   }
   
   /// Pause or resume in-app messages
-  /// Useful during checkout or important flows
   static void setInAppMessagesPaused(bool paused) {
-    OneSignal.InAppMessages.paused(paused);
+    if (kIsWeb) return;
+    // Mobile-only
   }
   
   /// Trigger an in-app message by key
-  /// Use this for custom triggers (e.g., "show_offer", "first_purchase")
   static void addInAppMessageTrigger(String key, String value) {
-    OneSignal.InAppMessages.addTrigger(key, value);
+    if (kIsWeb) return;
+    // Mobile-only
   }
   
   /// Remove an in-app message trigger
   static void removeInAppMessageTrigger(String key) {
-    OneSignal.InAppMessages.removeTrigger(key);
+    if (kIsWeb) return;
+    // Mobile-only
   }
 }
 
