@@ -40,6 +40,20 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     // Add money to wallet after successful payment
+    final user = SupabaseService.currentUser;
+    if (user != null) {
+      try {
+        await WalletRepository.creditWallet(
+          userId: user.id,
+          amount: _pendingAmount,
+          description: 'Wallet recharge via Razorpay',
+          paymentId: response.paymentId,
+        );
+      } catch (e) {
+        print('Error crediting wallet: $e');
+      }
+    }
+    
     if (mounted) {
       setState(() => _isLoading = false);
       ref.invalidate(walletProvider);
@@ -151,80 +165,83 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   void _showPaymentOptions(double amount) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Add ₹${amount.toStringAsFixed(0)} to Wallet',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Pay securely with Razorpay',
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 24),
-            
-            // All payment options via Razorpay
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(12),
+      builder: (context) => SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add ₹${amount.toStringAsFixed(0)} to Wallet',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildPaymentIcon('G', 'GPay'),
-                      _buildPaymentIcon('P', 'PhonePe'),
-                      _buildPaymentIcon('₿', 'Paytm'),
-                      _buildPaymentIcon('💳', 'Cards'),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _isLoading ? null : () => _payWithRazorpay(amount),
-                      icon: _isLoading 
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.payment),
-                      label: Text(_isLoading ? 'Processing...' : 'Pay ₹${amount.toStringAsFixed(0)}'),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+              const SizedBox(height: 4),
+              Text(
+                'Pay securely with Razorpay',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              
+              // All payment options via Razorpay
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildPaymentIcon('G', 'GPay'),
+                        _buildPaymentIcon('P', 'PhonePe'),
+                        _buildPaymentIcon('₿', 'Paytm'),
+                        _buildPaymentIcon('💳', 'Cards'),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _isLoading ? null : () => _payWithRazorpay(amount),
+                        icon: _isLoading 
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.payment),
+                        label: Text(_isLoading ? 'Processing...' : 'Pay ₹${amount.toStringAsFixed(0)}'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 12),
+              
+              // Security note
+              Row(
+                children: [
+                  Icon(Icons.verified_user, color: Colors.green.shade700, size: 18),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Secured by Razorpay • UPI, Cards, Net Banking',
+                      style: TextStyle(color: Colors.green.shade700, fontSize: 11),
                     ),
                   ),
                 ],
               ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Security note
-            Row(
-              children: [
-                Icon(Icons.verified_user, color: Colors.green.shade700, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Secured by Razorpay • UPI, Cards, Net Banking',
-                    style: TextStyle(color: Colors.green.shade700, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 16),
-          ],
+              
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -335,18 +352,32 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                                 prefixText: '₹ ',
                                 hintText: 'Enter amount',
                                 border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
-                          FilledButton(
-                            onPressed: () {
+                          GestureDetector(
+                            onTap: () {
                               final amount = double.tryParse(_customAmountController.text) ?? 0;
                               if (amount > 0) {
                                 _showPaymentOptions(amount);
                               }
                             },
-                            child: const Text('Add'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'Add',
+                                style: TextStyle(
+                                  color: colorScheme.onPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -389,18 +420,70 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Transaction list
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Column(
-                    children: [
-                      Icon(Icons.history, size: 48, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text('No recent transactions', style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                ),
+              // Transaction list from database
+              Consumer(
+                builder: (context, ref, child) {
+                  final transactionsAsync = ref.watch(walletTransactionsProvider);
+                  
+                  return transactionsAsync.when(
+                    data: (transactions) {
+                      if (transactions.isEmpty) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Column(
+                              children: [
+                                Icon(Icons.history, size: 48, color: Colors.grey),
+                                SizedBox(height: 16),
+                                Text('No recent transactions', style: TextStyle(color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      
+                      return Column(
+                        children: transactions.map((tx) {
+                          final isCredit = tx.type == 'credit';
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: isCredit 
+                                    ? Colors.green.shade50 
+                                    : Colors.red.shade50,
+                                child: Icon(
+                                  isCredit ? Icons.add : Icons.remove,
+                                  color: isCredit ? Colors.green : Colors.red,
+                                ),
+                              ),
+                              title: Text(
+                                tx.description ?? (isCredit ? 'Money Added' : 'Deduction'),
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              subtitle: Text(
+                                tx.createdAt != null 
+                                    ? '${tx.createdAt!.day}/${tx.createdAt!.month}/${tx.createdAt!.year}'
+                                    : '',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              ),
+                              trailing: Text(
+                                '${isCredit ? '+' : '-'}₹${tx.amount.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  color: isCredit ? Colors.green : Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
+                  );
+                },
               ),
             ],
           ),

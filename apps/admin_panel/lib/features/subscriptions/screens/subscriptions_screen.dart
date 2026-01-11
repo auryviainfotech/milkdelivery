@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:data_table_2/data_table_2.dart';
+
 import 'package:milk_core/milk_core.dart';
 import 'package:intl/intl.dart';
 
@@ -228,31 +228,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
     );
   }
 
-  void _pauseSubscription(Map<String, dynamic> sub) async {
-    await SupabaseService.client
-        .from('subscriptions')
-        .update({'status': 'paused'})
-        .eq('id', sub['id']);
-    ref.invalidate(subscriptionsProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Subscription paused')),
-      );
-    }
-  }
 
-  void _resumeSubscription(Map<String, dynamic> sub) async {
-    await SupabaseService.client
-        .from('subscriptions')
-        .update({'status': 'active'})
-        .eq('id', sub['id']);
-    ref.invalidate(subscriptionsProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Subscription resumed')),
-      );
-    }
-  }
 
   void _viewDetails(Map<String, dynamic> sub, Map<String, dynamic>? profile) {
     showDialog(

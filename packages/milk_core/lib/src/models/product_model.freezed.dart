@@ -28,6 +28,9 @@ mixin _$ProductModel {
   String? get imageUrl => throw _privateConstructorUsedError;
   String get emoji => throw _privateConstructorUsedError;
   bool get isActive => throw _privateConstructorUsedError;
+
+  /// Category: 'subscription' for daily milk, 'one_time' for additional purchases (ghee, butter, etc.)
+  ProductCategory get category => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
   /// Serializes this ProductModel to a JSON map.
@@ -55,6 +58,7 @@ abstract class $ProductModelCopyWith<$Res> {
       String? imageUrl,
       String emoji,
       bool isActive,
+      ProductCategory category,
       DateTime? createdAt});
 }
 
@@ -81,6 +85,7 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
     Object? imageUrl = freezed,
     Object? emoji = null,
     Object? isActive = null,
+    Object? category = null,
     Object? createdAt = freezed,
   }) {
     return _then(_value.copyWith(
@@ -116,6 +121,10 @@ class _$ProductModelCopyWithImpl<$Res, $Val extends ProductModel>
           ? _value.isActive
           : isActive // ignore: cast_nullable_to_non_nullable
               as bool,
+      category: null == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as ProductCategory,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -141,6 +150,7 @@ abstract class _$$ProductModelImplCopyWith<$Res>
       String? imageUrl,
       String emoji,
       bool isActive,
+      ProductCategory category,
       DateTime? createdAt});
 }
 
@@ -165,6 +175,7 @@ class __$$ProductModelImplCopyWithImpl<$Res>
     Object? imageUrl = freezed,
     Object? emoji = null,
     Object? isActive = null,
+    Object? category = null,
     Object? createdAt = freezed,
   }) {
     return _then(_$ProductModelImpl(
@@ -200,6 +211,10 @@ class __$$ProductModelImplCopyWithImpl<$Res>
           ? _value.isActive
           : isActive // ignore: cast_nullable_to_non_nullable
               as bool,
+      category: null == category
+          ? _value.category
+          : category // ignore: cast_nullable_to_non_nullable
+              as ProductCategory,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -216,10 +231,11 @@ class _$ProductModelImpl implements _ProductModel {
       required this.name,
       this.description,
       required this.price,
-      this.unit = 'litre',
+      this.unit = '500ml',
       this.imageUrl,
       this.emoji = '🥛',
       this.isActive = true,
+      this.category = ProductCategory.subscription,
       this.createdAt});
 
   factory _$ProductModelImpl.fromJson(Map<String, dynamic> json) =>
@@ -244,12 +260,17 @@ class _$ProductModelImpl implements _ProductModel {
   @override
   @JsonKey()
   final bool isActive;
+
+  /// Category: 'subscription' for daily milk, 'one_time' for additional purchases (ghee, butter, etc.)
+  @override
+  @JsonKey()
+  final ProductCategory category;
   @override
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'ProductModel(id: $id, name: $name, description: $description, price: $price, unit: $unit, imageUrl: $imageUrl, emoji: $emoji, isActive: $isActive, createdAt: $createdAt)';
+    return 'ProductModel(id: $id, name: $name, description: $description, price: $price, unit: $unit, imageUrl: $imageUrl, emoji: $emoji, isActive: $isActive, category: $category, createdAt: $createdAt)';
   }
 
   @override
@@ -268,6 +289,8 @@ class _$ProductModelImpl implements _ProductModel {
             (identical(other.emoji, emoji) || other.emoji == emoji) &&
             (identical(other.isActive, isActive) ||
                 other.isActive == isActive) &&
+            (identical(other.category, category) ||
+                other.category == category) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
@@ -275,7 +298,7 @@ class _$ProductModelImpl implements _ProductModel {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(runtimeType, id, name, description, price,
-      unit, imageUrl, emoji, isActive, createdAt);
+      unit, imageUrl, emoji, isActive, category, createdAt);
 
   /// Create a copy of ProductModel
   /// with the given fields replaced by the non-null parameter values.
@@ -303,6 +326,7 @@ abstract class _ProductModel implements ProductModel {
       final String? imageUrl,
       final String emoji,
       final bool isActive,
+      final ProductCategory category,
       final DateTime? createdAt}) = _$ProductModelImpl;
 
   factory _ProductModel.fromJson(Map<String, dynamic> json) =
@@ -324,6 +348,10 @@ abstract class _ProductModel implements ProductModel {
   String get emoji;
   @override
   bool get isActive;
+
+  /// Category: 'subscription' for daily milk, 'one_time' for additional purchases (ghee, butter, etc.)
+  @override
+  ProductCategory get category;
   @override
   DateTime? get createdAt;
 

@@ -4,17 +4,35 @@ import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import '../../dashboard/screens/delivery_dashboard_screen.dart';
 
-/// Provider to fetch delivery details
-final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, deliveryId) async {
+/// Provider to fetch order details for delivery confirmation
+final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, orderId) async {
+  print('DEBUG deliveryDetailProvider: Looking for order with id: $orderId');
   try {
+    // Fetch order with customer profile and subscription details
     final response = await SupabaseService.client
-        .from('deliveries')
-        .select('*, orders(*, profiles(full_name, address, phone))')
-        .eq('id', deliveryId)
-        .single();
-    return response;
+        .from('orders')
+        .select('*, profiles!orders_user_id_fkey(id, full_name, address, phone), subscriptions!orders_subscription_id_fkey(delivery_slot)')
+        .eq('id', orderId)
+        .maybeSingle();
+    
+    if (response == null) {
+      print('DEBUG deliveryDetailProvider: No order found for id: $orderId');
+      return null;
+    }
+    
+    print('DEBUG deliveryDetailProvider: Found order: ${response['id']}');
+    
+    // Transform to expected format for compatibility
+    return {
+      'id': response['id'],
+      'order_id': response['id'],
+      'status': response['status'] ?? 'pending',
+      'delivered_at': response['delivered_at'],
+      'delivery_slot': response['subscriptions']?['delivery_slot'] ?? 'morning',
+      'orders': response, // Include full order data
+    };
   } catch (e) {
-    print('Error fetching delivery: $e');
+    print('Error fetching order for delivery: $e');
     return null;
   }
 });
@@ -120,22 +138,25 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                           children: [
                             const Text('🥛', style: TextStyle(fontSize: 24)),
                             const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Milk Delivery',
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    fontWeight: FontWeight.w500,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Milk Delivery',
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  'Scheduled: ${delivery['scheduled_date'] ?? 'Today'}',
-                                  style: TextStyle(
-                                    color: colorScheme.onSurfaceVariant,
+                                  Text(
+                                    'Scheduled: ${delivery['scheduled_date'] ?? 'Today'}',
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -258,12 +279,18 @@ class DeliveryConfirmScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () async {
-                  // Update delivery status to issue
+                  // Update order status to failed (issue is not valid for orders table)
                   try {
+                    await SupabaseService.client
+                        .from('orders')
+                        .update({'status': 'failed'})
+                        .eq('id', delivery['id']);
+                    
+                    // Update deliveries table with issue status
                     await SupabaseService.client
                         .from('deliveries')
                         .update({'status': 'issue'})
-                        .eq('id', delivery['id']);
+                        .eq('order_id', delivery['id']);
                   } catch (e) {
                     print('Error reporting issue: $e');
                   }
@@ -316,31 +343,29 @@ class DeliveryConfirmScreen extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () async {
-              // Update delivery status
+              // Update order status to delivered
               try {
+                // Update orders table (only status - no delivered_at column here)
+                await SupabaseService.client
+                    .from('orders')
+                    .update({'status': 'delivered'})
+                    .eq('id', delivery['id']);
+                
+                // Update deliveries table (has delivered_at column)
                 await SupabaseService.client
                     .from('deliveries')
                     .update({
                       'status': 'delivered',
                       'delivered_at': DateTime.now().toIso8601String(),
                     })
-                    .eq('id', delivery['id']);
-                
-                // Also update the order status
-                final orderId = delivery['order_id'];
-                if (orderId != null) {
-                  await SupabaseService.client
-                      .from('orders')
-                      .update({'status': 'delivered'})
-                      .eq('id', orderId);
-                }
+                    .eq('order_id', delivery['id']);
                 
                 // Invalidate providers to refresh dashboard data
                 ref.invalidate(todayDeliveriesProvider);
-                ref.invalidate(deliveryDetailProvider(orderId.toString()));
+                ref.invalidate(deliveryDetailProvider(orderId));
                 
               } catch (e) {
-                print('Error updating delivery: $e');
+                print('Error updating order: $e');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

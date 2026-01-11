@@ -14,6 +14,7 @@ import '../features/orders/screens/orders_screen.dart';
 import '../features/orders/screens/order_detail_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/notifications/screens/notifications_screen.dart';
+import '../features/shop/screens/shop_screen.dart';
 import '../shared/widgets/main_shell.dart';
 
 /// App router configuration using GoRouter
@@ -89,6 +90,11 @@ final appRouter = GoRouter(
       path: '/subscriptions',
       name: 'subscriptions',
       builder: (context, state) => const SubscriptionListScreen(),
+    ),
+    GoRoute(
+      path: '/shop',
+      name: 'shop',
+      builder: (context, state) => const ShopScreen(),
     ),
     GoRoute(
       path: '/subscription/:id',

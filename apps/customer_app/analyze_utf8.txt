@@ -1,0 +1,69 @@
+﻿Analyzing customer_app...                                       
+
+warning - Unused import: 'package:flutter/material.dart' - lib\app\router.dart:1:8 - unused_import
+   info - The imported package 'supabase_flutter' isn't a dependency of the importing package - lib\features\auth\screens\login_screen.dart:4:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - lib\features\auth\screens\otp_screen.dart:66:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\auth\screens\otp_screen.dart:70:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\auth\screens\otp_screen.dart:96:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\auth\screens\otp_screen.dart:115:7 - avoid_print
+   info - Don't use 'BuildContext's across async gaps - lib\features\auth\screens\otp_screen.dart:132:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\auth\screens\otp_screen.dart:136:28 - use_build_context_synchronously
+   info - The imported package 'supabase_flutter' isn't a dependency of the importing package - lib\features\auth\screens\signup_screen.dart:4:8 - depend_on_referenced_packages
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\dashboard\screens\dashboard_screen.dart:324:32 - deprecated_member_use
+warning - Unused import: 'package:milk_core/milk_core.dart' - lib\features\notifications\screens\notifications_screen.dart:2:8 - unused_import
+warning - The declaration '_buildNotificationItem' isn't referenced - lib\features\notifications\screens\notifications_screen.dart:47:10 - unused_element
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\notifications\screens\notifications_screen.dart:61:54 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\notifications\screens\notifications_screen.dart:66:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\orders\screens\order_detail_screen.dart:37:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\orders\screens\order_detail_screen.dart:38:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\orders\screens\order_detail_screen.dart:47:57 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\orders\screens\order_detail_screen.dart:48:57 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\orders\screens\orders_screen.dart:181:30 - deprecated_member_use
+   info - The imported package 'supabase_flutter' isn't a dependency of the importing package - lib\features\profile\screens\profile_screen.dart:4:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - lib\features\profile\screens\profile_screen.dart:43:15 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\profile\screens\profile_screen.dart:45:17 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\profile\screens\profile_screen.dart:58:17 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\profile\screens\profile_screen.dart:60:17 - avoid_print
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:62:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:63:38 - use_build_context_synchronously
+   info - Don't invoke 'print' in production code - lib\features\profile\screens\profile_screen.dart:67:17 - avoid_print
+   info - Don't invoke 'print' in production code - lib\features\profile\screens\profile_screen.dart:68:17 - avoid_print
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:69:38 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:121:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:122:38 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:126:38 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:393:35 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:394:42 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\profile\screens\profile_screen.dart:400:42 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\profile\screens\profile_screen.dart:464:53 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\shop\screens\shop_screen.dart:338:41 - deprecated_member_use
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\splash\screens\splash_screen.dart:109:38 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\features\splash\screens\splash_screen.dart:110:29 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\splash\screens\splash_screen.dart:111:38 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\splash\screens\splash_screen.dart:113:39 - prefer_const_constructors
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\splash\screens\splash_screen.dart:136:47 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\splash\screens\splash_screen.dart:142:23 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\splash\screens\splash_screen.dart:145:32 - prefer_const_constructors
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\order_success_screen.dart:72:56 - deprecated_member_use
+   info - Use 'const' with the constructor to improve performance - lib\features\subscription\screens\subscription_detail_screen.dart:68:28 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\subscription\screens\subscription_detail_screen.dart:69:33 - prefer_const_literals_to_create_immutables
+  error - Undefined name 'userSubscriptionsProvider' - lib\features\subscription\screens\subscription_detail_screen.dart:188:22 - undefined_identifier
+  error - Undefined name 'userSubscriptionsProvider' - lib\features\subscription\screens\subscription_detail_screen.dart:242:22 - undefined_identifier
+   info - The private field _selectedTimeSlot could be 'final' - lib\features\subscription\screens\subscription_list_screen.dart:43:10 - prefer_final_fields
+warning - The left operand can't be null, so the right operand is never executed - lib\features\subscription\screens\subscription_list_screen.dart:200:31 - dead_null_aware_expression
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:338:95 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:341:71 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:371:75 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:420:61 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:422:71 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:499:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:537:75 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\subscription\screens\subscription_list_screen.dart:563:58 - deprecated_member_use
+warning - The declaration '_buildPlanChip' isn't referenced - lib\features\subscription\screens\subscription_list_screen.dart:582:10 - unused_element
+   info - Use 'const' with the constructor to improve performance - lib\features\subscription\screens\subscription_list_screen.dart:709:22 - prefer_const_constructors
+   info - Don't invoke 'print' in production code - lib\features\wallet\screens\wallet_screen.dart:53:9 - avoid_print
+   info - Don't use 'BuildContext's across async gaps - lib\features\wallet\screens\wallet_screen.dart:144:21 - use_build_context_synchronously
+   info - The type of the right operand ('String') isn't a subtype or a supertype of the left operand ('TransactionType') - lib\features\wallet\screens\wallet_screen.dart:430:52 - unrelated_type_equality_checks
+  error - The getter 'description' isn't defined for the type 'WalletTransaction' - lib\features\wallet\screens\wallet_screen.dart:444:36 - undefined_getter
+   info - Use 'const' for final variables initialized to a constant value - lib\services\upi_payment_service.dart:17:5 - prefer_const_declarations
+

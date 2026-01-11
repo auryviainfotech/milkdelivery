@@ -48,10 +48,10 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          IconButton.filled(
             onPressed: () => _showCreateRouteDialog(),
             icon: const Icon(Icons.add),
-            label: const Text('Create Route'),
+            tooltip: 'Create Route',
           ),
           const SizedBox(width: 16),
         ],

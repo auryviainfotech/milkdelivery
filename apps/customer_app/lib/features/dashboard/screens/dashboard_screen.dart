@@ -226,7 +226,7 @@ class DashboardScreen extends ConsumerWidget {
                 _buildQuickAction(context, Icons.payment, 'Pay', () => context.push('/wallet')),
                 _buildQuickAction(context, Icons.add_box_outlined, 'New', () => context.push('/subscriptions')),
                 _buildQuickAction(context, Icons.history, 'History', () => context.push('/orders')),
-                _buildQuickAction(context, Icons.local_offer_outlined, 'Offers', () {}),
+                _buildQuickAction(context, Icons.shopping_bag_outlined, 'Shop', () => context.push('/shop')),
               ],
             ),
             const SizedBox(height: 24),

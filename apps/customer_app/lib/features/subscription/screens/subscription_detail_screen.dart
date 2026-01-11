@@ -185,7 +185,7 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
           .eq('id', widget.subscriptionId);
       
       ref.invalidate(subscriptionWithPauseProvider(widget.subscriptionId));
-      ref.invalidate(userSubscriptionsProvider);
+      ref.invalidate(activeSubscriptionsProvider);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -239,7 +239,7 @@ class _SubscriptionDetailScreenState extends ConsumerState<SubscriptionDetailScr
           .update({'status': 'cancelled'})
           .eq('id', widget.subscriptionId);
       
-      ref.invalidate(userSubscriptionsProvider);
+      ref.invalidate(activeSubscriptionsProvider);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

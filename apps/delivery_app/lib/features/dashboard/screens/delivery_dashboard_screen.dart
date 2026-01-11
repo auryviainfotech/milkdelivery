@@ -64,6 +64,11 @@ final todayDeliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref)
         
     print('DEBUG: Fetched ${filteredOrders.length} orders for assigned customers');
     
+    // Debug: Print each order ID
+    for (final order in filteredOrders) {
+      print('DEBUG: Order ID: ${order['id']} (type: ${order['id'].runtimeType})');
+    }
+    
     // Transform to the expected format (matching old deliveries structure)
     return filteredOrders.map((order) => <String, dynamic>{
       'id': order['id'],
@@ -454,80 +459,113 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        customerName,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          decoration: isDelivered ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                      if (phone.isNotEmpty)
-                        Row(
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.phone, size: 12, color: colorScheme.primary),
-                            const SizedBox(width: 4),
                             Text(
-                              phone,
-                              style: TextStyle(color: colorScheme.primary, fontSize: 12),
+                              customerName,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                decoration: isDelivered ? TextDecoration.lineThrough : null,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
+                            if (phone.isNotEmpty)
+                              Text(
+                                phone,
+                                style: TextStyle(color: colorScheme.primary, fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                           ],
                         ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Time Slot Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isMorning 
-                        ? Colors.amber.withOpacity(0.1)
-                        : Colors.indigo.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isMorning ? Icons.wb_sunny : Icons.nights_stay,
-                        size: 12,
-                        color: isMorning ? Colors.amber.shade700 : Colors.indigo,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        isMorning ? 'AM' : 'PM',
-                        style: TextStyle(
-                          color: isMorning ? Colors.amber.shade700 : Colors.indigo,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 10,
+                      // Status indicator for delivered
+                      if (isDelivered) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.successColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle, size: 14, color: AppTheme.successColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Done',
+                                style: TextStyle(
+                                  color: AppTheme.successColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Status Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDelivered 
-                        ? AppTheme.successColor.withOpacity(0.1)
-                        : AppTheme.pendingColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    isDelivered ? '✓ Delivered' : 'Pending',
-                    style: TextStyle(
-                      color: isDelivered ? AppTheme.successColor : AppTheme.pendingColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            // Badges Row - only show time slot for pending, hide for delivered
+            if (!isDelivered)
+              Row(
+                children: [
+                  // Time Slot Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isMorning 
+                          ? Colors.amber.withOpacity(0.1)
+                          : Colors.indigo.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isMorning ? Icons.wb_sunny : Icons.nights_stay,
+                          size: 12,
+                          color: isMorning ? Colors.amber.shade700 : Colors.indigo,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isMorning ? 'AM' : 'PM',
+                          style: TextStyle(
+                            color: isMorning ? Colors.amber.shade700 : Colors.indigo,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Status Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.pendingColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Pending',
+                      style: TextStyle(
+                        color: AppTheme.pendingColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 12),
             
             // Address
@@ -601,7 +639,10 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       Expanded(
                         flex: 2,
                         child: FilledButton.icon(
-                          onPressed: () => context.push('/delivery/${delivery['id']}'),
+                          onPressed: () {
+                            print('DEBUG: Navigating to delivery with ID: ${delivery['id']}');
+                            context.push('/delivery/${delivery['id']}');
+                          },
                           icon: const Icon(Icons.qr_code_scanner, size: 20),
                           label: const Text('Scan & Deliver'),
                           style: FilledButton.styleFrom(
@@ -656,10 +697,16 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
 
     if (confirmed == true) {
       try {
+        // Update orders table (only status - no delivered_at column here)
+        await SupabaseService.client.from('orders').update({
+          'status': 'delivered',
+        }).eq('id', delivery['id']);
+        
+        // Update deliveries table (has delivered_at column)
         await SupabaseService.client.from('deliveries').update({
           'status': 'delivered',
           'delivered_at': DateTime.now().toIso8601String(),
-        }).eq('id', delivery['id']);
+        }).eq('order_id', delivery['id']);
         
         ref.invalidate(todayDeliveriesProvider);
         
@@ -719,10 +766,16 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
 
     if (confirmed == true && issueController.text.trim().isNotEmpty) {
       try {
+        // Update orders table (only status - issue_notes is in deliveries table)
+        await SupabaseService.client.from('orders').update({
+          'status': 'failed',
+        }).eq('id', delivery['id']);
+        
+        // Update deliveries table (has issue_notes column)
         await SupabaseService.client.from('deliveries').update({
           'status': 'issue',
           'issue_notes': issueController.text.trim(),
-        }).eq('id', delivery['id']);
+        }).eq('order_id', delivery['id']);
         
         ref.invalidate(todayDeliveriesProvider);
         

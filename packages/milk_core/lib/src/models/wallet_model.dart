@@ -40,6 +40,7 @@ class WalletTransaction with _$WalletTransaction {
     required double amount,
     required TransactionType type,
     TransactionReason? reason,
+    String? description, // Added description field
     String? paymentId,
     DateTime? createdAt,
   }) = _WalletTransaction;

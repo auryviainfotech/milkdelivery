@@ -60,6 +60,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _navigateAfterAuth(String userId) async {
+    // Save OneSignal player ID for push notifications
+    try {
+      await NotificationService.savePlayerId();
+    } catch (e) {
+      // Non-critical - continue with login even if this fails
+    }
+    
     // Check if profile is complete
     final profile = await SupabaseService.client
         .from('profiles')

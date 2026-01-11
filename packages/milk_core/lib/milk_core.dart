@@ -17,6 +17,7 @@ export 'src/services/user_repository.dart';
 export 'src/services/wallet_repository.dart';
 export 'src/services/subscription_repository.dart';
 export 'src/services/order_generation_service.dart';
+export 'src/services/notification_service.dart';
 
 // Utils
 export 'src/utils/input_sanitizer.dart';

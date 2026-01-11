@@ -53,6 +53,13 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
         'balance': 0.0,
       });
 
+      // Save OneSignal player ID for push notifications
+      try {
+        await NotificationService.savePlayerId();
+      } catch (e) {
+        // Non-critical - continue even if this fails
+      }
+
       // Force refresh of profile provider so Dashboard gets new data
       ref.invalidate(userProfileProvider);
       // Wait a tiny bit for the invalidation to propagate effectively or data to settle

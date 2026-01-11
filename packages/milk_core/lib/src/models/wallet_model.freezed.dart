@@ -232,6 +232,8 @@ mixin _$WalletTransaction {
   double get amount => throw _privateConstructorUsedError;
   TransactionType get type => throw _privateConstructorUsedError;
   TransactionReason? get reason => throw _privateConstructorUsedError;
+  String? get description =>
+      throw _privateConstructorUsedError; // Added description field
   String? get paymentId => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
@@ -257,6 +259,7 @@ abstract class $WalletTransactionCopyWith<$Res> {
       double amount,
       TransactionType type,
       TransactionReason? reason,
+      String? description,
       String? paymentId,
       DateTime? createdAt});
 }
@@ -281,6 +284,7 @@ class _$WalletTransactionCopyWithImpl<$Res, $Val extends WalletTransaction>
     Object? amount = null,
     Object? type = null,
     Object? reason = freezed,
+    Object? description = freezed,
     Object? paymentId = freezed,
     Object? createdAt = freezed,
   }) {
@@ -305,6 +309,10 @@ class _$WalletTransactionCopyWithImpl<$Res, $Val extends WalletTransaction>
           ? _value.reason
           : reason // ignore: cast_nullable_to_non_nullable
               as TransactionReason?,
+      description: freezed == description
+          ? _value.description
+          : description // ignore: cast_nullable_to_non_nullable
+              as String?,
       paymentId: freezed == paymentId
           ? _value.paymentId
           : paymentId // ignore: cast_nullable_to_non_nullable
@@ -331,6 +339,7 @@ abstract class _$$WalletTransactionImplCopyWith<$Res>
       double amount,
       TransactionType type,
       TransactionReason? reason,
+      String? description,
       String? paymentId,
       DateTime? createdAt});
 }
@@ -353,6 +362,7 @@ class __$$WalletTransactionImplCopyWithImpl<$Res>
     Object? amount = null,
     Object? type = null,
     Object? reason = freezed,
+    Object? description = freezed,
     Object? paymentId = freezed,
     Object? createdAt = freezed,
   }) {
@@ -377,6 +387,10 @@ class __$$WalletTransactionImplCopyWithImpl<$Res>
           ? _value.reason
           : reason // ignore: cast_nullable_to_non_nullable
               as TransactionReason?,
+      description: freezed == description
+          ? _value.description
+          : description // ignore: cast_nullable_to_non_nullable
+              as String?,
       paymentId: freezed == paymentId
           ? _value.paymentId
           : paymentId // ignore: cast_nullable_to_non_nullable
@@ -398,6 +412,7 @@ class _$WalletTransactionImpl implements _WalletTransaction {
       required this.amount,
       required this.type,
       this.reason,
+      this.description,
       this.paymentId,
       this.createdAt});
 
@@ -415,13 +430,16 @@ class _$WalletTransactionImpl implements _WalletTransaction {
   @override
   final TransactionReason? reason;
   @override
+  final String? description;
+// Added description field
+  @override
   final String? paymentId;
   @override
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'WalletTransaction(id: $id, walletId: $walletId, amount: $amount, type: $type, reason: $reason, paymentId: $paymentId, createdAt: $createdAt)';
+    return 'WalletTransaction(id: $id, walletId: $walletId, amount: $amount, type: $type, reason: $reason, description: $description, paymentId: $paymentId, createdAt: $createdAt)';
   }
 
   @override
@@ -435,6 +453,8 @@ class _$WalletTransactionImpl implements _WalletTransaction {
             (identical(other.amount, amount) || other.amount == amount) &&
             (identical(other.type, type) || other.type == type) &&
             (identical(other.reason, reason) || other.reason == reason) &&
+            (identical(other.description, description) ||
+                other.description == description) &&
             (identical(other.paymentId, paymentId) ||
                 other.paymentId == paymentId) &&
             (identical(other.createdAt, createdAt) ||
@@ -443,8 +463,8 @@ class _$WalletTransactionImpl implements _WalletTransaction {
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, id, walletId, amount, type, reason, paymentId, createdAt);
+  int get hashCode => Object.hash(runtimeType, id, walletId, amount, type,
+      reason, description, paymentId, createdAt);
 
   /// Create a copy of WalletTransaction
   /// with the given fields replaced by the non-null parameter values.
@@ -470,6 +490,7 @@ abstract class _WalletTransaction implements WalletTransaction {
       required final double amount,
       required final TransactionType type,
       final TransactionReason? reason,
+      final String? description,
       final String? paymentId,
       final DateTime? createdAt}) = _$WalletTransactionImpl;
 
@@ -486,6 +507,8 @@ abstract class _WalletTransaction implements WalletTransaction {
   TransactionType get type;
   @override
   TransactionReason? get reason;
+  @override
+  String? get description; // Added description field
   @override
   String? get paymentId;
   @override

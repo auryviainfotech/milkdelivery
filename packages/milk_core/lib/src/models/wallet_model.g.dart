@@ -32,6 +32,7 @@ _$WalletTransactionImpl _$$WalletTransactionImplFromJson(
       amount: (json['amount'] as num).toDouble(),
       type: $enumDecode(_$TransactionTypeEnumMap, json['type']),
       reason: $enumDecodeNullable(_$TransactionReasonEnumMap, json['reason']),
+      description: json['description'] as String?,
       paymentId: json['paymentId'] as String?,
       createdAt: json['createdAt'] == null
           ? null
@@ -46,6 +47,7 @@ Map<String, dynamic> _$$WalletTransactionImplToJson(
       'amount': instance.amount,
       'type': _$TransactionTypeEnumMap[instance.type]!,
       'reason': _$TransactionReasonEnumMap[instance.reason],
+      'description': instance.description,
       'paymentId': instance.paymentId,
       'createdAt': instance.createdAt?.toIso8601String(),
     };

@@ -1,4 +1,5 @@
 import 'supabase_service.dart';
+import 'wallet_repository.dart';
 
 /// Service for generating daily orders from active subscriptions
 class OrderGenerationService {
@@ -16,10 +17,10 @@ class OrderGenerationService {
     
     final targetDateStr = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
     
-    // 1. Get active subscriptions where end_date >= targetDate
+    // 1. Get active subscriptions with profile info (no products join - fetch separately)
     final subscriptions = await client
         .from('subscriptions')
-        .select('*, profiles(id, full_name, address, latitude, longitude, assigned_delivery_person_id)')
+        .select('*, profiles:user_id(id, full_name, address, latitude, longitude, assigned_delivery_person_id)')
         .eq('status', 'active')
         .gte('end_date', targetDateStr);
     
@@ -27,11 +28,18 @@ class OrderGenerationService {
       return {'orders_created': 0, 'deliveries_assigned': 0, 'unassigned': 0};
     }
     
-    // 2. Get all delivery persons with their service areas
-    final deliveryPersons = await client
-        .from('profiles')
-        .select('id, full_name, service_pin_codes, qr_code')
-        .eq('role', 'delivery');
+    // 2. Fetch all products to lookup prices
+    final productsResponse = await client
+        .from('products')
+        .select('id, price');
+    
+    // Create a map for quick product price lookup
+    final productPrices = <String, double>{};
+    for (final product in productsResponse) {
+      final productId = product['id']?.toString() ?? '';
+      final price = (product['price'] as num?)?.toDouble() ?? 0.0;
+      productPrices[productId] = price;
+    }
     
     // 3. Get the weekday name for target date (for weekly plan matching)
     final weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -41,7 +49,8 @@ class OrderGenerationService {
     for (final sub in subscriptions) {
       final userId = sub['user_id'] as String?;
       final profile = sub['profiles'] as Map<String, dynamic>?;
-      final planType = sub['plan_type'] as String? ?? 'daily';
+      final productId = sub['product_id'] as String?;
+      final planType = sub['plan_type'] as String? ?? 'monthly';
       final isPaused = sub['is_paused'] as bool? ?? false;
       
       if (userId == null) continue;
@@ -83,20 +92,27 @@ class OrderGenerationService {
       ordersCreated++;
       
       // Create order items
-      final productId = sub['product_id'] as String?;
       final quantity = sub['quantity'] as int? ?? 1;
-      final price = (sub['total_amount'] as num?)?.toDouble() ?? 0.0;
       
-      // Calculate daily price based on plan type
-      double dailyPrice;
-      switch (planType) {
-        case 'weekly':
-          dailyPrice = price / 7;
-          break;
-        case 'monthly':
-        case 'daily':
-        default:
-          dailyPrice = price / 30;
+      // Lookup product price from our cached map
+      final dailyPrice = productId != null ? (productPrices[productId] ?? 0.0) : 0.0;
+      
+      // Multiply by quantity for total daily cost
+      final totalDailyAmount = dailyPrice * quantity;
+      
+      // Try to debit from wallet
+      final debitSuccess = await WalletRepository.debitWallet(
+        userId: userId,
+        amount: totalDailyAmount,
+        description: 'Daily milk delivery - $targetDateStr',
+        orderId: orderId,
+      );
+      
+      // If wallet debit failed (insufficient balance), mark order as payment_pending
+      if (!debitSuccess) {
+        await client.from('orders')
+            .update({'status': 'payment_pending'})
+            .eq('id', orderId);
       }
       
       if (productId != null) {
@@ -108,20 +124,14 @@ class OrderGenerationService {
         });
       }
       
-      // Use assigned delivery person from customer profile (new assignment system)
+      // Use assigned delivery person from customer profile (MANUAL ASSIGNMENT ONLY)
+      // No PIN code fallback - customers must be assigned via Assignments screen
       String? assignedPersonId = profile?['assigned_delivery_person_id'] as String?;
-      
-      // Fallback to PIN code matching if no direct assignment
-      if (assignedPersonId == null) {
-        final address = profile?['address'] as String? ?? '';
-        final customerPinCode = _extractPinCode(address);
-        assignedPersonId = _findDeliveryPerson(deliveryPersons, customerPinCode);
-      }
       
       // Create delivery record
       await client.from('deliveries').insert({
         'order_id': orderId,
-        'delivery_person_id': assignedPersonId,
+        'delivery_person_id': assignedPersonId, // Null if not manually assigned
         'scheduled_date': targetDateStr,
         'status': 'pending',
       });
@@ -171,41 +181,5 @@ class OrderGenerationService {
     }
   }
   
-  /// Extract PIN code from address string
-  /// Looks for 6-digit number patterns (Indian PIN codes)
-  static String? _extractPinCode(String address) {
-    final pinRegex = RegExp(r'\b\d{6}\b');
-    final match = pinRegex.firstMatch(address);
-    return match?.group(0);
-  }
-  
-  /// Find a delivery person who serves the given PIN code
-  static String? _findDeliveryPerson(
-    List<dynamic> deliveryPersons, 
-    String? customerPinCode,
-  ) {
-    if (customerPinCode == null || customerPinCode.isEmpty) {
-      return null;
-    }
-    
-    for (final person in deliveryPersons) {
-      // Check service_pin_codes array (PostgreSQL text[])
-      final servicePinCodes = person['service_pin_codes'] as List<dynamic>?;
-      if (servicePinCodes != null) {
-        for (final pin in servicePinCodes) {
-          if (pin.toString().trim() == customerPinCode) {
-            return person['id'] as String?;
-          }
-        }
-      }
-      
-      // Also check qr_code field (legacy area storage)
-      final legacyArea = person['qr_code'] as String?;
-      if (legacyArea != null && legacyArea.contains(customerPinCode)) {
-        return person['id'] as String?;
-      }
-    }
-    
-    return null;
-  }
+
 }

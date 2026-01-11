@@ -8,11 +8,12 @@ final productsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async 
   final response = await SupabaseService.client
       .from('products')
       .select('*')
-      .order('created_at', ascending: false);
+      .order('category')
+      .order('name');
   return List<Map<String, dynamic>>.from(response);
 });
 
-/// Products Management Screen with Real Data
+/// Products Management Screen with Category Support
 class ProductsScreen extends ConsumerStatefulWidget {
   const ProductsScreen({super.key});
 
@@ -21,6 +22,8 @@ class ProductsScreen extends ConsumerStatefulWidget {
 }
 
 class _ProductsScreenState extends ConsumerState<ProductsScreen> {
+  String _categoryFilter = 'all'; // 'all', 'subscription', 'one_time'
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -36,138 +39,207 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
+          IconButton.filled(
             onPressed: () => _showProductDialog(context),
             icon: const Icon(Icons.add),
-            label: const Text('Add Product'),
+            tooltip: 'Add Product',
           ),
           const SizedBox(width: 16),
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
-        child: productsAsync.when(
-          data: (products) {
-            if (products.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.inventory_2_outlined, size: 64, color: colorScheme.onSurfaceVariant),
-                    const SizedBox(height: 16),
-                    Text('No products found', style: TextStyle(color: colorScheme.onSurfaceVariant)),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: () => _showProductDialog(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add First Product'),
-                    ),
-                  ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Category filter chips
+            Row(
+              children: [
+                const Text('Filter by: ', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: const Text('All'),
+                  selected: _categoryFilter == 'all',
+                  onSelected: (_) => setState(() => _categoryFilter = 'all'),
                 ),
-              );
-            }
+                const SizedBox(width: 8),
+                FilterChip(
+                  avatar: const Text('🥛'),
+                  label: const Text('Subscription (Daily Milk)'),
+                  selected: _categoryFilter == 'subscription',
+                  onSelected: (_) => setState(() => _categoryFilter = 'subscription'),
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  avatar: const Text('🧈'),
+                  label: const Text('One-Time (Butter, Ghee, etc.)'),
+                  selected: _categoryFilter == 'one_time',
+                  onSelected: (_) => setState(() => _categoryFilter = 'one_time'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: DataTable2(
-                  columnSpacing: 12,
-                  horizontalMargin: 12,
-                  minWidth: 600,
-                  columns: const [
-                    DataColumn2(label: Text('Product Name'), size: ColumnSize.L),
-                    DataColumn2(label: Text('Price'), size: ColumnSize.S),
-                    DataColumn2(label: Text('Unit'), size: ColumnSize.S),
-                    DataColumn2(label: Text('Status'), size: ColumnSize.S),
-                    DataColumn2(label: Text('Actions'), size: ColumnSize.M),
-                  ],
-                  rows: products.map((product) {
-                    final isActive = product['is_active'] ?? true;
-                    return DataRow2(
-                      cells: [
-                        DataCell(
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(product['emoji'] ?? '🥛', style: const TextStyle(fontSize: 16)),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
+            // Products table
+            Expanded(
+              child: productsAsync.when(
+                data: (products) {
+                  // Filter by category
+                  final filtered = _categoryFilter == 'all'
+                      ? products
+                      : products.where((p) => p['category'] == _categoryFilter).toList();
+                  
+                  if (filtered.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.inventory_2_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+                          const SizedBox(height: 16),
+                          Text('No products found', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: () => _showProductDialog(context),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add First Product'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: DataTable2(
+                        columnSpacing: 12,
+                        horizontalMargin: 12,
+                        minWidth: 800,
+                        columns: const [
+                          DataColumn2(label: Text('Product Name'), size: ColumnSize.L),
+                          DataColumn2(label: Text('Category'), size: ColumnSize.S),
+                          DataColumn2(label: Text('Price'), size: ColumnSize.S),
+                          DataColumn2(label: Text('Unit'), size: ColumnSize.S),
+                          DataColumn2(label: Text('Status'), size: ColumnSize.S),
+                          DataColumn2(label: Text('Actions'), size: ColumnSize.M),
+                        ],
+                        rows: filtered.map((product) {
+                          final isActive = product['is_active'] ?? true;
+                          final category = product['category'] ?? 'subscription';
+                          final isSubscription = category == 'subscription';
+                          
+                          return DataRow2(
+                            cells: [
+                              DataCell(
+                                Row(
                                   children: [
-                                    Text(
-                                      product['name'] ?? '',
-                                      style: const TextStyle(fontWeight: FontWeight.w500),
-                                    ),
-                                    if (product['description'] != null)
-                                      Text(
-                                        product['description'],
-                                        style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                                        overflow: TextOverflow.ellipsis,
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: isSubscription 
+                                            ? colorScheme.primaryContainer 
+                                            : Colors.orange.shade100,
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
+                                      child: Text(product['emoji'] ?? '🥛', style: const TextStyle(fontSize: 14)),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            product['name'] ?? '',
+                                            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                          if (product['description'] != null && product['description'].toString().isNotEmpty)
+                                            Text(
+                                              product['description'],
+                                              style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isSubscription ? Colors.blue.shade50 : Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    isSubscription ? 'Subscription' : 'One-Time',
+                                    style: TextStyle(
+                                      color: isSubscription ? Colors.blue : Colors.orange.shade800,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text('₹${(product['price'] ?? 0).toStringAsFixed(2)}')),
+                              DataCell(Text(product['unit'] ?? '-')),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (isActive ? AppTheme.successColor : AppTheme.errorColor).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    isActive ? 'Active' : 'Inactive',
+                                    style: TextStyle(
+                                      color: isActive ? AppTheme.successColor : AppTheme.errorColor,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      onPressed: () => _showProductDialog(context, product: product),
+                                      icon: const Icon(Icons.edit_outlined),
+                                      tooltip: 'Edit',
+                                    ),
+                                    IconButton(
+                                      onPressed: () => _toggleStatus(product),
+                                      icon: Icon(
+                                        isActive ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                      ),
+                                      tooltip: isActive ? 'Deactivate' : 'Activate',
+                                    ),
+                                    IconButton(
+                                      onPressed: () => _deleteProduct(product),
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                      tooltip: 'Delete',
+                                    ),
                                   ],
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                        DataCell(Text('₹${(product['price'] ?? 0).toStringAsFixed(2)}')),
-                        DataCell(Text(product['unit'] ?? '-')),
-                        DataCell(
-                          Chip(
-                            label: Text(
-                              isActive ? 'Active' : 'Inactive',
-                              style: TextStyle(
-                                color: isActive ? AppTheme.successColor : AppTheme.errorColor,
-                                fontSize: 12,
-                              ),
-                            ),
-                            backgroundColor: (isActive 
-                                ? AppTheme.successColor 
-                                : AppTheme.errorColor).withOpacity(0.1),
-                            side: BorderSide.none,
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                        DataCell(
-                          Row(
-                            children: [
-                              IconButton(
-                                onPressed: () => _showProductDialog(context, product: product),
-                                icon: const Icon(Icons.edit_outlined),
-                                tooltip: 'Edit',
-                              ),
-                              IconButton(
-                                onPressed: () => _toggleStatus(product),
-                                icon: Icon(
-                                  isActive ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                ),
-                                tooltip: isActive ? 'Deactivate' : 'Activate',
-                              ),
-                              IconButton(
-                                onPressed: () => _deleteProduct(product),
-                                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                tooltip: 'Delete',
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Error: $e')),
               ),
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+            ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -185,32 +257,85 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final priceController = TextEditingController(text: product?['price']?.toString() ?? '');
     final unitController = TextEditingController(text: product?['unit'] ?? '500ml');
     String selectedEmoji = product?['emoji'] ?? '🥛';
+    String selectedCategory = product?['category'] ?? 'subscription';
     bool isLoading = false;
     String? errorMessage;
     
-    // Available milk emojis
-    const emojis = ['🥛', '🍼', '🧴', '🦬', '🐄', '🐮'];
+    // Emojis organized by category
+    const subscriptionEmojis = ['🥛', '🫙', '🍼'];  // Milk, Curd, Bottle
+    const oneTimeEmojis = ['🧈', '🧀', '🫙', '🍨', '🥤', '🍬', '📦'];  // Butter, Cheese, Ghee, Sweet, Drink, Candy, Package
+    
+    List<String> getEmojisForCategory(String category) {
+      return category == 'subscription' ? subscriptionEmojis : oneTimeEmojis;
+    }
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(isEdit ? 'Edit Product' : 'Add Product'),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Emoji picker
-                Column(
+        builder: (context, setState) {
+          final currentEmojis = getEmojisForCategory(selectedCategory);
+          // Reset emoji if switching category and current emoji isn't in new category
+          if (!currentEmojis.contains(selectedEmoji)) {
+            selectedEmoji = currentEmojis.first;
+          }
+          
+          return AlertDialog(
+            title: Text(isEdit ? 'Edit Product' : 'Add Product'),
+            content: SizedBox(
+              width: 450,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Category selector
+                    const Text('Product Category *', style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: RadioListTile<String>(
+                            title: const Row(
+                              children: [
+                                Text('🥛 '),
+                                Expanded(child: Text('Subscription', style: TextStyle(fontSize: 13))),
+                              ],
+                            ),
+                            subtitle: const Text('Daily milk delivery', style: TextStyle(fontSize: 11)),
+                            value: 'subscription',
+                            groupValue: selectedCategory,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (v) => setState(() => selectedCategory = v!),
+                          ),
+                        ),
+                        Expanded(
+                          child: RadioListTile<String>(
+                            title: const Row(
+                              children: [
+                                Text('🧈 '),
+                                Expanded(child: Text('One-Time', style: TextStyle(fontSize: 13))),
+                              ],
+                            ),
+                            subtitle: const Text('Butter, Ghee, etc.', style: TextStyle(fontSize: 11)),
+                            value: 'one_time',
+                            groupValue: selectedCategory,
+                            contentPadding: EdgeInsets.zero,
+                            onChanged: (v) => setState(() => selectedCategory = v!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    
+                    // Emoji picker (filtered by category)
                     const Text('Product Icon:', style: TextStyle(fontWeight: FontWeight.w500)),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: emojis.map((emoji) => GestureDetector(
+                      children: currentEmojis.map((emoji) => GestureDetector(
                         onTap: () => setState(() => selectedEmoji = emoji),
                         child: Container(
                           padding: const EdgeInsets.all(8),
@@ -226,133 +351,156 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                         ),
                       )).toList(),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Product Name *',
-                    border: OutlineInputBorder(),
-                    hintText: 'e.g., Full Cream Milk',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                    hintText: 'e.g., Rich & creamy, 6% fat',
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: priceController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Price (₹) *',
-                          border: OutlineInputBorder(),
-                          hintText: '35',
-                        ),
+                    const SizedBox(height: 16),
+                    
+                    // Product name
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Product Name *',
+                        border: const OutlineInputBorder(),
+                        hintText: selectedCategory == 'subscription' 
+                            ? 'e.g., Nandini Pasteurised Cow Milk (Green)'
+                            : 'e.g., Nandini Butter',
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextField(
-                        controller: unitController,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit',
-                          border: OutlineInputBorder(),
-                          hintText: '500ml',
+                    const SizedBox(height: 16),
+                    
+                    // Description
+                    TextField(
+                      controller: descController,
+                      decoration: InputDecoration(
+                        labelText: 'Description',
+                        border: const OutlineInputBorder(),
+                        hintText: selectedCategory == 'subscription'
+                            ? 'e.g., Fresh pasteurised milk from KMF'
+                            : 'e.g., Fresh unsalted butter',
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Price and Unit
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: priceController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Price (₹) *',
+                              border: OutlineInputBorder(),
+                              hintText: '26',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: unitController,
+                            decoration: InputDecoration(
+                              labelText: 'Unit/Pack Size',
+                              border: const OutlineInputBorder(),
+                              hintText: selectedCategory == 'subscription' ? '500ml' : '500g',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    // Error message
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(errorMessage!, style: const TextStyle(color: Colors.red))),
+                          ],
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
-                if (errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    errorMessage!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isLoading ? null : () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: isLoading ? null : () async {
-                // Validation
-                if (nameController.text.trim().isEmpty) {
-                  setState(() => errorMessage = 'Product name is required');
-                  return;
-                }
-                final price = double.tryParse(priceController.text);
-                if (price == null || price <= 0) {
-                  setState(() => errorMessage = 'Valid price is required');
-                  return;
-                }
-                
-                setState(() {
-                  isLoading = true;
-                  errorMessage = null;
-                });
-                
-                try {
-                  final data = {
-                    'name': nameController.text.trim(),
-                    'description': descController.text.trim(),
-                    'price': price,
-                    'unit': unitController.text.trim().isEmpty ? '500ml' : unitController.text.trim(),
-                    'emoji': selectedEmoji,
-                    'is_active': true,
-                  };
-                  
-                  if (isEdit) {
-                    await SupabaseService.client
-                        .from('products')
-                        .update(data)
-                        .eq('id', product['id']);
-                  } else {
-                    await SupabaseService.client
-                        .from('products')
-                        .insert(data);
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isLoading ? null : () async {
+                  // Validation
+                  if (nameController.text.trim().isEmpty) {
+                    setState(() => errorMessage = 'Product name is required');
+                    return;
+                  }
+                  final price = double.tryParse(priceController.text);
+                  if (price == null || price <= 0) {
+                    setState(() => errorMessage = 'Valid price is required');
+                    return;
                   }
                   
-                  ref.invalidate(productsProvider);
-                  
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(isEdit ? 'Product updated!' : 'Product added!'),
-                        backgroundColor: AppTheme.successColor,
-                      ),
-                    );
-                  }
-                } catch (e) {
                   setState(() {
-                    isLoading = false;
-                    errorMessage = 'Error: ${e.toString()}';
+                    isLoading = true;
+                    errorMessage = null;
                   });
-                  print('Product save error: $e');
-                }
-              },
-              child: isLoading 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(isEdit ? 'Update' : 'Add'),
-            ),
-          ],
-        ),
+                  
+                  try {
+                    final data = {
+                      'name': nameController.text.trim(),
+                      'description': descController.text.trim(),
+                      'price': price,
+                      'unit': unitController.text.trim().isEmpty ? '500ml' : unitController.text.trim(),
+                      'emoji': selectedEmoji,
+                      'category': selectedCategory,
+                      'is_active': true,
+                    };
+                    
+                    if (isEdit) {
+                      await SupabaseService.client
+                          .from('products')
+                          .update(data)
+                          .eq('id', product['id']);
+                    } else {
+                      await SupabaseService.client
+                          .from('products')
+                          .insert(data);
+                    }
+                    
+                    ref.invalidate(productsProvider);
+                    
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isEdit ? 'Product updated!' : 'Product added!'),
+                          backgroundColor: AppTheme.successColor,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    setState(() {
+                      isLoading = false;
+                      errorMessage = 'Error: ${e.toString()}';
+                    });
+                    debugPrint('Product save error: $e');
+                  }
+                },
+                child: isLoading 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text(isEdit ? 'Update' : 'Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -187,10 +187,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 : 'Select Date Range'),
           ),
           const SizedBox(width: 16),
-          FilledButton.icon(
+          IconButton.filled(
             onPressed: () => _exportToCSV(reportAsync),
             icon: const Icon(Icons.download),
-            label: const Text('Export CSV'),
+            tooltip: 'Export CSV',
           ),
           const SizedBox(width: 16),
         ],

@@ -12,10 +12,13 @@ _$ProductModelImpl _$$ProductModelImplFromJson(Map<String, dynamic> json) =>
       name: json['name'] as String,
       description: json['description'] as String?,
       price: (json['price'] as num).toDouble(),
-      unit: json['unit'] as String? ?? 'litre',
+      unit: json['unit'] as String? ?? '500ml',
       imageUrl: json['imageUrl'] as String?,
       emoji: json['emoji'] as String? ?? '🥛',
       isActive: json['isActive'] as bool? ?? true,
+      category:
+          $enumDecodeNullable(_$ProductCategoryEnumMap, json['category']) ??
+              ProductCategory.subscription,
       createdAt: json['createdAt'] == null
           ? null
           : DateTime.parse(json['createdAt'] as String),
@@ -31,5 +34,11 @@ Map<String, dynamic> _$$ProductModelImplToJson(_$ProductModelImpl instance) =>
       'imageUrl': instance.imageUrl,
       'emoji': instance.emoji,
       'isActive': instance.isActive,
+      'category': _$ProductCategoryEnumMap[instance.category]!,
       'createdAt': instance.createdAt?.toIso8601String(),
     };
+
+const _$ProductCategoryEnumMap = {
+  ProductCategory.subscription: 'subscription',
+  ProductCategory.oneTime: 'one_time',
+};

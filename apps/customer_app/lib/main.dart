@@ -17,6 +17,12 @@ void main() async {
     supabaseAnonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
 
+  // Initialize OneSignal for push notifications
+  final oneSignalAppId = dotenv.env['ONESIGNAL_APP_ID'];
+  if (oneSignalAppId != null && oneSignalAppId.isNotEmpty) {
+    await NotificationService.initialize(oneSignalAppId: oneSignalAppId);
+  }
+
   runApp(
     const ProviderScope(
       child: MilkCustomerApp(),

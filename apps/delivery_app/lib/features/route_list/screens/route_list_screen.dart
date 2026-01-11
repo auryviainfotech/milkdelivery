@@ -147,11 +147,17 @@ class RouteListScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final delivery = deliveries[index];
               final isDelivered = delivery['status'] == 'delivered';
+              // Extract customer info from nested structure
+              final order = delivery['orders'] as Map<String, dynamic>?;
+              final customer = order?['profiles'] as Map<String, dynamic>?;
+              final phone = customer?['phone'] ?? delivery['phone'] ?? '';
+              final address = customer?['address'] ?? delivery['address'] ?? '';
+              
               return _DeliveryCard(
                 delivery: delivery,
                 index: index + 1,
-                onCall: () => _makeCall(delivery['phone'] ?? ''),
-                onNavigate: () => _openMaps(delivery['address'] ?? ''),
+                onCall: () => _makeCall(phone),
+                onNavigate: () => _openMaps(address),
                 onConfirm: isDelivered ? null : () => context.push('/delivery/${delivery['id']}'),
               );
             },
@@ -198,10 +204,18 @@ class _DeliveryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDelivered = delivery['status'] == 'delivered';
+    
+    // Get customer info from nested order/profile (same as dashboard)
+    final order = delivery['orders'] as Map<String, dynamic>?;
+    final customer = order?['profiles'] as Map<String, dynamic>?;
+    final customerName = customer?['full_name'] ?? delivery['name'] ?? 'Customer';
+    final address = customer?['address'] ?? delivery['address'] ?? 'Address not provided';
+    final phone = customer?['phone'] ?? delivery['phone'] ?? '';
+    final deliverySlot = delivery['delivery_slot'] ?? 'morning';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: isDelivered ? AppTheme.successColor.withOpacity(0.1) : null,
+      color: isDelivered ? AppTheme.successColor.withValues(alpha: 0.1) : null,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -226,13 +240,14 @@ class _DeliveryCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        delivery['name'] ?? 'Customer',
+                        customerName,
                         style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                       ),
-                      Text(
-                        delivery['phone'] ?? '',
-                        style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
+                      if (phone.isNotEmpty)
+                        Text(
+                          phone,
+                          style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
                     ],
                   ),
                 ),
@@ -244,7 +259,7 @@ class _DeliveryCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    isDelivered ? 'DELIVERED' : (delivery['plan']?.toString().toUpperCase() ?? 'DAILY'),
+                    isDelivered ? 'DELIVERED' : (deliverySlot == 'morning' ? 'AM' : 'PM'),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: isDelivered ? Colors.white : colorScheme.onSecondaryContainer,
                       fontWeight: FontWeight.w600,
@@ -263,22 +278,7 @@ class _DeliveryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    delivery['address'] ?? 'Address not provided',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Product
-            Row(
-              children: [
-                const Text('🥛', style: TextStyle(fontSize: 16)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    delivery['product'] ?? 'Milk Delivery',
+                    address,
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -299,7 +299,7 @@ class _DeliveryCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onNavigate,
                     icon: const Icon(Icons.navigation, size: 18),
-                    label: const Text('Navigate'),
+                    label: const Text('Nav'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -307,11 +307,12 @@ class _DeliveryCard extends StatelessWidget {
                   child: isDelivered
                       ? FilledButton.icon(
                           onPressed: null,
-                          icon: const Icon(Icons.check),
-                          label: const Text('Done'),
+                          icon: const Icon(Icons.check, size: 16),
+                          label: const Text('Done', overflow: TextOverflow.ellipsis),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppTheme.successColor,
-                            disabledBackgroundColor: AppTheme.successColor.withOpacity(0.5),
+                            disabledBackgroundColor: AppTheme.successColor.withValues(alpha: 0.5),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                         )
                       : FilledButton(

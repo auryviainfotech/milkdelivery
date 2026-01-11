@@ -61,4 +61,77 @@ class WalletRepository {
         .map((json) => WalletTransaction.fromJson(json))
         .toList();
   }
+
+  /// Debit (deduct) amount from wallet
+  /// Returns true if successful, false if insufficient balance
+  static Future<bool> debitWallet({
+    required String userId,
+    required double amount,
+    required String description,
+    String? orderId,
+  }) async {
+    // Get current wallet
+    final wallet = await getWallet(userId);
+    
+    // Check if sufficient balance
+    if (wallet.balance < amount) {
+      return false; // Insufficient balance
+    }
+    
+    // Calculate new balance
+    final newBalance = wallet.balance - amount;
+    
+    // Update wallet balance
+    await SupabaseService.client
+        .from(_walletTable)
+        .update({'balance': newBalance})
+        .eq('id', wallet.id);
+    
+    // Log transaction
+    await SupabaseService.client.from(_transactionTable).insert({
+      'wallet_id': wallet.id,
+      'type': 'debit',
+      'amount': amount,
+      'reason': description,
+      'payment_id': orderId,
+    });
+    
+    return true;
+  }
+
+  /// Credit (add) amount to wallet
+  static Future<void> creditWallet({
+    required String userId,
+    required double amount,
+    required String description,
+    String? paymentId,
+  }) async {
+    // Get current wallet
+    final wallet = await getWallet(userId);
+    
+    // Calculate new balance
+    final newBalance = wallet.balance + amount;
+    
+    // Update wallet balance
+    await SupabaseService.client
+        .from(_walletTable)
+        .update({'balance': newBalance})
+        .eq('id', wallet.id);
+    
+    // Log transaction
+    await SupabaseService.client.from(_transactionTable).insert({
+      'wallet_id': wallet.id,
+      'type': 'credit',
+      'amount': amount,
+      'reason': description,
+      'payment_id': paymentId,
+    });
+  }
+
+  /// Get wallet balance for a user (quick check)
+  static Future<double> getBalance(String userId) async {
+    final wallet = await getWallet(userId);
+    return wallet.balance;
+  }
 }
+
