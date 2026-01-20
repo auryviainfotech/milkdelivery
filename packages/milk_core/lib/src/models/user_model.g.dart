@@ -14,8 +14,11 @@ _$UserModelImpl _$$UserModelImplFromJson(Map<String, dynamic> json) =>
       address: json['address'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      qrCode: json['qr_code'] as String?,
       role: $enumDecodeNullable(_$UserRoleEnumMap, json['role']) ??
           UserRole.customer,
+      litersRemaining: (json['liters_remaining'] as num?)?.toDouble() ?? 0.0,
+      subscriptionStatus: json['subscription_status'] as String? ?? 'inactive',
       createdAt: json['created_at'] == null
           ? null
           : DateTime.parse(json['created_at'] as String),
@@ -29,7 +32,10 @@ Map<String, dynamic> _$$UserModelImplToJson(_$UserModelImpl instance) =>
       'address': instance.address,
       'latitude': instance.latitude,
       'longitude': instance.longitude,
+      'qr_code': instance.qrCode,
       'role': _$UserRoleEnumMap[instance.role]!,
+      'liters_remaining': instance.litersRemaining,
+      'subscription_status': instance.subscriptionStatus,
       'created_at': instance.createdAt?.toIso8601String(),
     };
 

@@ -4,14 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
-import '../../../services/razorpay_service.dart';
 import '../../../shared/providers/auth_providers.dart';
 
-// Products are now fetched dynamically from Supabase via productsProvider
-// Admin can add/edit/delete products in the Admin Panel
-
-/// Subscription list and new subscription screen
+/// Subscription Request Screen
+/// User selects product + monthly quantity and submits request
+/// Admin will manually activate after offline payment collection
 class SubscriptionListScreen extends ConsumerStatefulWidget {
   const SubscriptionListScreen({super.key});
 
@@ -21,160 +18,12 @@ class SubscriptionListScreen extends ConsumerStatefulWidget {
 
 class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen> {
   String? _selectedProductId;
-  String _selectedPlan = 'monthly'; // Only monthly plan available
-  int _quantity = 1;
+  int _monthlyLiters = 30; // Default 30 liters per month (1L/day)
   bool _isProcessing = false;
-  
-  // Cutoff time for new subscriptions (10 PM)
-  static const int cutoffHour = 22;
-  
-  bool get _isAfterCutoff => DateTime.now().hour >= cutoffHour;
-  
-  // Get number of days in current month
-  int _getDaysInCurrentMonth() {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month + 1, 0).day;
-  }
-  
-  // Delivery days - skip weekends option
   bool _skipWeekends = false;
-  
-  // Delivery time slot (morning/evening)
-  String _selectedTimeSlot = 'morning';
   
   // Products fetched from Supabase (converted to Map format for UI compatibility)
   List<Map<String, dynamic>> _products = [];
-  
-  // Razorpay payment tracking
-  Map<String, dynamic>? _pendingPaymentData;
-  
-  @override
-  void initState() {
-    super.initState();
-    _initRazorpay();
-  }
-  
-  void _initRazorpay() {
-    RazorpayService.init(
-      onSuccess: _handlePaymentSuccess,
-      onError: _handlePaymentError,
-    );
-  }
-  
-  @override
-  void dispose() {
-    RazorpayService.dispose();
-    super.dispose();
-  }
-  
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    if (_pendingPaymentData == null) return;
-    
-    // Save subscription to database
-    await _saveSubscription(
-      _pendingPaymentData!['product'],
-      _pendingPaymentData!['address'],
-      _pendingPaymentData!['latitude'],
-      _pendingPaymentData!['longitude'],
-    );
-    
-    if (mounted) {
-      setState(() => _isProcessing = false);
-      
-      // Show success dialog
-      _showPaymentSuccessDialog(response.paymentId ?? 'N/A');
-    }
-    
-    _pendingPaymentData = null;
-  }
-  
-  void _handlePaymentError(PaymentFailureResponse response) {
-    if (mounted) {
-      setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment failed: ${response.message ?? "Unknown error"}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-    _pendingPaymentData = null;
-  }
-  
-  void _showPaymentSuccessDialog(String paymentId) {
-    final product = _pendingPaymentData?['product'];
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.check_circle, color: Colors.green, size: 64),
-        title: const Text('Payment Successful!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${product?['name'] ?? 'Subscription'} - $_planLabel',
-              style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '₹${_totalPrice.toStringAsFixed(0)}',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  const Text('✅ Order Confirmed', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('Payment ID: $paymentId', style: const TextStyle(fontSize: 12)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Your milk delivery will start from tomorrow!',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.go('/dashboard');
-            },
-            child: const Text('Go to Dashboard'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  double get _pricePerDay {
-    if (_selectedProductId == null) return 0;
-    final product = _products.firstWhere((p) => p['id'] == _selectedProductId);
-    return (product['price'] as double) * _quantity;
-  }
-
-  double get _totalPrice {
-    // Monthly only - calculate based on actual days in month
-    return _pricePerDay * _getDaysInCurrentMonth();
-  }
-
-  String get _planLabel {
-    return 'Monthly (${_getDaysInCurrentMonth()} days)';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -225,39 +74,39 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 10 PM Cutoff Banner
-                      if (_isAfterCutoff)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade100,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.access_time, color: Colors.orange),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Orders closed for tomorrow',
-                                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
-                                    ),
-                                    Text(
-                                      'Cutoff time is 10 PM. New subscriptions will start day after tomorrow.',
-                                      style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                      // Info Banner
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
                         ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue.shade700),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'How Subscription Works',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '1. Select product & monthly liters\n2. Submit request\n3. Admin will call you for payment\n4. After payment, your subscription activates',
+                                    style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       
                       // Product selection
                       Text(
@@ -285,238 +134,185 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
                       ),
                       const SizedBox(height: 24),
 
-                      // Quantity selector
+                      // Monthly Liters selector
                       if (_selectedProductId != null) ...[
                         Text(
-                          'Quantity (per delivery)',
+                          'Monthly Liters',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton.filledTonal(
-                            onPressed: _quantity > 1
-                                ? () => setState(() => _quantity--)
-                                : null,
-                            icon: const Icon(Icons.remove),
                           ),
-                          Container(
-                            width: 60,
-                            alignment: Alignment.center,
-                            child: Text(
-                              '$_quantity',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          IconButton.filledTonal(
-                            onPressed: _quantity < 5
-                                ? () => setState(() => _quantity++)
-                                : null,
-                            icon: const Icon(Icons.add),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Monthly Plan Info (Only plan available)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [colorScheme.primaryContainer, colorScheme.primaryContainer.withOpacity(0.5)],
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colorScheme.primary.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(Icons.calendar_month, color: colorScheme.onPrimary),
+                        const SizedBox(height: 8),
+                        Text(
+                          'How many liters do you need per month?',
+                          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Monthly Subscription',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              IconButton.filledTonal(
+                                onPressed: _monthlyLiters > 5
+                                    ? () => setState(() => _monthlyLiters -= 5)
+                                    : null,
+                                icon: const Icon(Icons.remove),
+                              ),
+                              Container(
+                                width: 100,
+                                alignment: Alignment.center,
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      '$_monthlyLiters',
+                                      style: theme.textTheme.headlineSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text('Liters/Month', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${_getDaysInCurrentMonth()} days this month',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: colorScheme.onPrimaryContainer.withOpacity(0.8),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                              IconButton.filledTonal(
+                                onPressed: _monthlyLiters < 100
+                                    ? () => setState(() => _monthlyLiters += 5)
+                                    : null,
+                                icon: const Icon(Icons.add),
+                              ),
+                            ],
                           ),
-                          Icon(Icons.check_circle, color: colorScheme.primary),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                        ),
+                        const SizedBox(height: 8),
+                        // Quick select buttons
+                        Wrap(
+                          spacing: 8,
+                          children: [15, 30, 45, 60].map((liters) {
+                            final isSelected = _monthlyLiters == liters;
+                            return ChoiceChip(
+                              label: Text('$liters L'),
+                              selected: isSelected,
+                              onSelected: (_) => setState(() => _monthlyLiters = liters),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 24),
 
-                    
-                    // Skip weekends toggle
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.weekend, color: colorScheme.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Skip Weekends', style: TextStyle(fontWeight: FontWeight.w600)),
-                                Text(
-                                  'No delivery on Saturday & Sunday',
-                                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                        // Skip weekends toggle
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.weekend, color: colorScheme.primary),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Skip Weekends', style: TextStyle(fontWeight: FontWeight.w600)),
+                                    Text(
+                                      'No delivery on Saturday & Sunday',
+                                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              Switch(
+                                value: _skipWeekends,
+                                onChanged: (v) => setState(() => _skipWeekends = v),
+                              ),
+                            ],
                           ),
-                          Switch(
-                            value: _skipWeekends,
-                            onChanged: (v) => setState(() => _skipWeekends = v),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Summary Card
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Delivery time info (morning only)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: colorScheme.primary.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.wb_sunny, color: colorScheme.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Early Morning Delivery',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.primary,
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Product', style: TextStyle(color: colorScheme.onPrimaryContainer)),
+                                  Text(
+                                    _products.firstWhere((p) => p['id'] == _selectedProductId)['name'],
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
                                   ),
-                                ),
-                                Text(
-                                  '6:00 - 8:00 AM daily',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: colorScheme.onSurfaceVariant,
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Monthly Quota', style: TextStyle(color: colorScheme.onPrimaryContainer)),
+                                  Text(
+                                    '$_monthlyLiters Liters',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Delivery', style: TextStyle(color: colorScheme.onPrimaryContainer)),
+                                  Text(
+                                    _skipWeekends ? 'Mon-Fri' : 'Daily',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          Icon(Icons.check_circle, color: colorScheme.primary, size: 20),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-
-                    // Price display
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            _planLabel,
-                            style: TextStyle(color: colorScheme.onPrimaryContainer),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '₹${_totalPrice.toStringAsFixed(0)}',
-                            style: theme.textTheme.headlineLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onPrimaryContainer,
-                            ),
-                          ),
-                          if (_selectedPlan == 'daily')
-                            Text(
-                              '₹${_pricePerDay.toStringAsFixed(0)}/day',
-                              style: TextStyle(color: colorScheme.onPrimaryContainer),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // Subscribe button
-          if (_selectedProductId != null)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ),
-              child: SafeArea(
-                child: FilledButton(
-                  onPressed: _isProcessing ? null : _handleSubscribe,
-                  child: _isProcessing
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Subscribe Now'),
                 ),
               ),
-            ),
-        ],
-      );
+
+              // Submit button
+              if (_selectedProductId != null)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: FilledButton(
+                      onPressed: _isProcessing ? null : _handleSubmitRequest,
+                      child: _isProcessing
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Request Subscription'),
+                    ),
+                  ),
+                ),
+            ],
+          );
         },
       ),
     );
@@ -565,40 +361,16 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              '₹${(product['price'] as double).toStringAsFixed(0)}',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: isSelected ? colorScheme.onPrimaryContainer : colorScheme.primary,
-              ),
-            ),
+            if (isSelected)
+              Icon(Icons.check_circle, color: colorScheme.primary, size: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPlanChip(String value, String label) {
-    final isSelected = _selectedPlan == value;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Expanded(
-      child: ChoiceChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) => setState(() => _selectedPlan = value),
-        selectedColor: colorScheme.primary,
-        labelStyle: TextStyle(
-          color: isSelected ? colorScheme.onPrimary : null,
-        ),
-        showCheckmark: false,
-      ),
-    );
-  }
-
-  Future<void> _handleSubscribe() async {
-    // Show address dialog - now returns a Map with address and GPS
+  Future<void> _handleSubmitRequest() async {
+    // Show address dialog
     final result = await _showAddressDialog();
     if (result == null) return;
     
@@ -609,63 +381,38 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
     setState(() => _isProcessing = true);
 
     try {
-      // Get selected product
-      final product = _products.firstWhere((p) => p['id'] == _selectedProductId);
-      
-      // Get user info
       final user = SupabaseService.currentUser;
       if (user == null) throw Exception('Not logged in');
       
-      final profile = await SupabaseService.client
-          .from('profiles')
-          .select('full_name, phone')
-          .eq('id', user.id)
-          .maybeSingle();
+      // Get selected product
+      final product = _products.firstWhere((p) => p['id'] == _selectedProductId);
       
-      // Check wallet balance
-      final walletResponse = await SupabaseService.client
-          .from('wallets')
-          .select('id, balance')
-          .eq('user_id', user.id)
-          .maybeSingle();
-      
-      final walletBalance = (walletResponse?['balance'] as num?)?.toDouble() ?? 0;
-      
-      // Store pending payment data for callback
-      _pendingPaymentData = {
-        'product': product,
-        'address': address,
+      // Create subscription request (status = pending)
+      await SupabaseService.client.from('subscriptions').insert({
+        'user_id': user.id,
+        'product_id': _selectedProductId,
+        'quantity': 1, // Per delivery
+        'monthly_liters': _monthlyLiters,
+        'plan': 'monthly',
+        'status': 'pending', // Admin will activate
+        'skip_weekends': _skipWeekends,
+        'delivery_address': address,
         'latitude': latitude,
         'longitude': longitude,
-      };
-      
-      setState(() => _isProcessing = false);
-      
-      // Show payment options
-      if (!mounted) return;
-      
-      final paymentMethod = await showModalBottomSheet<String>(
-        context: context,
-        builder: (context) => _buildPaymentOptionsSheet(walletBalance),
-      );
-      
-      if (paymentMethod == null) return;
-      
-      if (paymentMethod == 'wallet') {
-        // Pay from wallet
-        await _payFromWallet(product, address, latitude, longitude, walletResponse?['id']);
-      } else {
-        // Pay via Razorpay
-        RazorpayService.openCheckout(
-          amount: _totalPrice,
-          orderId: 'ORD${DateTime.now().millisecondsSinceEpoch}',
-          description: '${product['name']} - $_planLabel subscription',
-          email: user.email ?? 'customer@milkdelivery.com',
-          phone: profile?['phone']?.toString().replaceAll('+91', '') ?? '',
-          name: profile?['full_name'] ?? '',
-        );
+        'time_slot': 'morning',
+        'start_date': DateTime.now().add(const Duration(days: 1)).toIso8601String().split('T')[0],
+      });
+
+      // Update profile address if set
+      await SupabaseService.client.from('profiles').update({
+        'address': address,
+        'subscription_status': 'pending',
+      }).eq('id', user.id);
+
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        _showSuccessDialog(product['name']);
       }
-      
     } catch (e) {
       setState(() => _isProcessing = false);
       if (mounted) {
@@ -676,455 +423,143 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
     }
   }
 
-  Widget _buildPaymentOptionsSheet(double walletBalance) {
-    final hasEnoughBalance = walletBalance >= _totalPrice;
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Choose Payment Method',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Amount: ₹${_totalPrice.toStringAsFixed(2)}',
-            style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600, fontSize: 16),
-          ),
-          const SizedBox(height: 24),
-          
-          // Wallet option
-          Card(
-            elevation: hasEnoughBalance ? 2 : 0,
-            color: hasEnoughBalance ? Colors.green.shade50 : Colors.grey.shade100,
-            child: ListTile(
-              leading: Icon(
-                Icons.account_balance_wallet,
-                color: hasEnoughBalance ? Colors.green : Colors.grey,
-              ),
-              title: Text('Pay from Wallet'),
-              subtitle: Text(
-                hasEnoughBalance 
-                    ? 'Balance: ₹${walletBalance.toStringAsFixed(2)}'
-                    : 'Insufficient balance (₹${walletBalance.toStringAsFixed(2)})',
-              ),
-              trailing: hasEnoughBalance 
-                  ? const Icon(Icons.check_circle, color: Colors.green)
-                  : TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        context.push('/wallet');
-                      },
-                      child: const Text('Recharge'),
-                    ),
-              onTap: hasEnoughBalance ? () => Navigator.pop(context, 'wallet') : null,
+  void _showSuccessDialog(String productName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.hourglass_top, color: Colors.orange, size: 64),
+        title: const Text('Request Submitted!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$productName - $_monthlyLiters Liters/Month',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 12),
-          
-          // Razorpay option
-          Card(
-            elevation: 2,
-            child: ListTile(
-              leading: const Icon(Icons.payment, color: Colors.blue),
-              title: const Text('Pay with Razorpay'),
-              subtitle: const Text('UPI, Cards, Net Banking'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => Navigator.pop(context, 'razorpay'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                children: [
+                  const Text('⏳ Pending Admin Approval', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Admin will call you to collect payment and activate your subscription.',
+                    style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.go('/dashboard');
+            },
+            child: const Text('Go to Dashboard'),
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Future<void> _payFromWallet(
-    Map<String, dynamic> product, 
-    String address, 
-    double? latitude, 
-    double? longitude,
-    String? walletId,
-  ) async {
-    if (walletId == null) return;
-    
-    final user = SupabaseService.currentUser;
-    if (user == null) return;
-    
-    setState(() => _isProcessing = true);
-    
-    try {
-      // Deduct from wallet
-      final walletResponse = await SupabaseService.client
-          .from('wallets')
-          .select('balance')
-          .eq('id', walletId)
-          .single();
-      
-      final currentBalance = (walletResponse['balance'] as num).toDouble();
-      final newBalance = currentBalance - _totalPrice;
-      
-      await SupabaseService.client
-          .from('wallets')
-          .update({
-            'balance': newBalance,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', walletId);
-      
-      // Record transaction
-      await SupabaseService.client
-          .from('wallet_transactions')
-          .insert({
-            'wallet_id': walletId,
-            'amount': _totalPrice,
-            'type': 'debit',
-            'reason': 'Subscription: ${product['name']} - $_planLabel',
-          });
-      
-      // Save subscription
-      await _saveSubscription(product, address, latitude, longitude);
-      
-      setState(() => _isProcessing = false);
-      
-      if (mounted) {
-        context.push('/order-success');
-      }
-    } catch (e) {
-      setState(() => _isProcessing = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment failed: $e')),
-        );
-      }
-    }
-  }
-
-
   Future<Map<String, dynamic>?> _showAddressDialog() async {
-    final houseController = TextEditingController();
-    final streetController = TextEditingController();
-    final landmarkController = TextEditingController();
-    final cityController = TextEditingController();
-    final pinController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
+    final addressController = TextEditingController();
     double? latitude;
     double? longitude;
-    bool isGettingLocation = false;
-    String locationStatus = '';
-    
+    bool isFetchingLocation = false;
+
     return showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final theme = Theme.of(context);
-            final colorScheme = theme.colorScheme;
-            
-            Future<void> getLocation() async {
-              setState(() {
-                isGettingLocation = true;
-                locationStatus = 'Checking permissions...';
-              });
-              
-              try {
-                // Check if location services are enabled
-                bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-                if (!serviceEnabled) {
-                  setState(() {
-                    isGettingLocation = false;
-                    locationStatus = '❌ Location services disabled';
-                  });
-                  return;
-                }
-                
-                // Check permissions
-                LocationPermission permission = await Geolocator.checkPermission();
-                if (permission == LocationPermission.denied) {
-                  permission = await Geolocator.requestPermission();
-                  if (permission == LocationPermission.denied) {
-                    setState(() {
-                      isGettingLocation = false;
-                      locationStatus = '❌ Location permission denied';
-                    });
-                    return;
-                  }
-                }
-                
-                if (permission == LocationPermission.deniedForever) {
-                  setState(() {
-                    isGettingLocation = false;
-                    locationStatus = '❌ Location permanently denied. Enable in settings.';
-                  });
-                  return;
-                }
-                
-                setState(() => locationStatus = 'Getting location...');
-                
-                // Get current position
-                Position position = await Geolocator.getCurrentPosition(
-                  desiredAccuracy: LocationAccuracy.high,
-                );
-                
-                setState(() => locationStatus = 'Identifying address...');
-                
-                // Reverse geocoding to get address text
-                List<Placemark> placemarks = await placemarkFromCoordinates(
-                  position.latitude,
-                  position.longitude,
-                );
-                
-                if (placemarks.isNotEmpty) {
-                  final place = placemarks.first;
-                  
-                  // Auto-fill form fields
-                  streetController.text = [
-                    if (place.subLocality != null && place.subLocality!.isNotEmpty) place.subLocality,
-                    if (place.locality != null && place.locality!.isNotEmpty && place.locality != place.subLocality) place.locality,
-                  ].join(', ');
-                  
-                  cityController.text = place.subAdministrativeArea ?? place.administrativeArea ?? '';
-                  pinController.text = place.postalCode ?? '';
-                }
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Delivery Address'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: addressController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Enter your full delivery address',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: isFetchingLocation
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.my_location),
+                      onPressed: isFetchingLocation
+                          ? null
+                          : () async {
+                              setDialogState(() => isFetchingLocation = true);
+                              try {
+                                final permission = await Geolocator.checkPermission();
+                                if (permission == LocationPermission.denied) {
+                                  await Geolocator.requestPermission();
+                                }
+                                final position = await Geolocator.getCurrentPosition();
+                                latitude = position.latitude;
+                                longitude = position.longitude;
 
-                setState(() {
-                  latitude = position.latitude;
-                  longitude = position.longitude;
-                  isGettingLocation = false;
-                  locationStatus = '✅ Location & Address captured!';
-                });
-              } catch (e) {
-                setState(() {
-                  isGettingLocation = false;
-                  locationStatus = '❌ Error: $e';
-                });
-              }
-            }
-            
-            return AlertDialog(
-              title: const Text('Delivery Address'),
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // GPS Location Button
-                      Card(
-                        color: latitude != null 
-                            ? Colors.green.shade50 
-                            : colorScheme.primaryContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    latitude != null ? Icons.check_circle : Icons.my_location,
-                                    color: latitude != null ? Colors.green : colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      latitude != null 
-                                          ? 'Location captured!'
-                                          : 'Get exact delivery location',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: latitude != null ? Colors.green.shade700 : null,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              if (latitude != null)
-                                Text(
-                                  '📍 ${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}',
-                                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                                )
-                              else
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: isGettingLocation ? null : getLocation,
-                                    icon: isGettingLocation 
-                                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                        : const Icon(Icons.gps_fixed),
-                                    label: Text(isGettingLocation ? locationStatus : 'Get My Location'),
-                                  ),
-                                ),
-                              if (locationStatus.isNotEmpty && latitude == null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(locationStatus, style: const TextStyle(fontSize: 12)),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      Text(
-                        'Enter address for delivery person:',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: houseController,
-                        decoration: const InputDecoration(
-                          labelText: 'House/Flat No. *',
-                          hintText: 'e.g., 12-A, Flat 302',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.home_outlined),
-                        ),
-                        validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: streetController,
-                        decoration: const InputDecoration(
-                          labelText: 'Street/Colony *',
-                          hintText: 'e.g., Gandhi Nagar, MG Road',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.signpost_outlined),
-                        ),
-                        validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: landmarkController,
-                        decoration: const InputDecoration(
-                          labelText: 'Landmark',
-                          hintText: 'e.g., Near School, Opposite Mall',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: cityController,
-                              decoration: const InputDecoration(
-                                labelText: 'City *',
-                                hintText: 'City',
-                                border: OutlineInputBorder(),
-                              ),
-                              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextFormField(
-                              controller: pinController,
-                              keyboardType: TextInputType.number,
-                              maxLength: 6,
-                              decoration: const InputDecoration(
-                                labelText: 'PIN *',
-                                hintText: '500001',
-                                border: OutlineInputBorder(),
-                                counterText: '',
-                              ),
-                              validator: (v) {
-                                if (v?.isEmpty ?? true) return 'Required';
-                                if (v!.length != 6) return '6 digits';
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                                final placemarks = await placemarkFromCoordinates(
+                                  position.latitude,
+                                  position.longitude,
+                                );
+                                if (placemarks.isNotEmpty) {
+                                  final p = placemarks.first;
+                                  addressController.text =
+                                      '${p.street}, ${p.subLocality}, ${p.locality}, ${p.postalCode}';
+                                }
+                              } catch (e) {
+                                debugPrint('Location error: $e');
+                              }
+                              setDialogState(() => isFetchingLocation = false);
+                            },
+                    ),
                   ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (formKey.currentState!.validate()) {
-                      final fullAddress = [
-                        houseController.text.trim(),
-                        streetController.text.trim(),
-                        if (landmarkController.text.trim().isNotEmpty)
-                          landmarkController.text.trim(),
-                        cityController.text.trim(),
-                        'PIN: ${pinController.text.trim()}',
-                      ].join(', ');
-                      Navigator.pop(context, {
-                        'address': fullAddress,
-                        'latitude': latitude,
-                        'longitude': longitude,
-                      });
-                    }
-                  },
-                  child: const Text('Proceed to Pay'),
+                const SizedBox(height: 8),
+                Text(
+                  'Tap the location icon to use current location',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ],
-            );
-          },
-        );
-      },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (addressController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter your address')),
+                  );
+                  return;
+                }
+                Navigator.pop(context, {
+                  'address': addressController.text.trim(),
+                  'latitude': latitude,
+                  'longitude': longitude,
+                });
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
     );
-  }
-
-  Future<void> _saveSubscription(Map<String, dynamic> product, String address, double? latitude, double? longitude) async {
-    final user = SupabaseService.currentUser;
-    if (user == null) return;
-
-    // Update user's address and GPS coordinates
-    final profileData = <String, dynamic>{
-      'id': user.id,
-      'address': address,
-    };
-    
-    // Add GPS coordinates if available
-    if (latitude != null && longitude != null) {
-      profileData['latitude'] = latitude;
-      profileData['longitude'] = longitude;
-    }
-    
-    await SupabaseService.client.from('profiles').upsert(profileData);
-
-    // Create subscription
-    final startDate = DateTime.now();
-    final endDate = _selectedPlan == 'weekly'
-        ? startDate.add(const Duration(days: 7))
-        : startDate.add(const Duration(days: 30));
-
-    // Calculate delivery days based on skip weekends toggle
-    List<String>? deliveryDays;
-    if (_skipWeekends) {
-      deliveryDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-    }
-
-    await SupabaseService.client.from('subscriptions').insert({
-      'user_id': user.id,
-      'product_id': product['id'],
-      'plan_type': _selectedPlan,
-      'quantity': _quantity,
-      'start_date': startDate.toIso8601String(),
-      'end_date': endDate.toIso8601String(),
-      'status': 'active',
-      'total_amount': _totalPrice,
-      'delivery_slot': _selectedTimeSlot,
-      if (deliveryDays != null) 'delivery_days': deliveryDays,
-    });
-    
-    // Refresh user profile provider so profile screen shows updated address
-    ref.invalidate(userProfileProvider);
-    ref.invalidate(activeSubscriptionsProvider);
   }
 }

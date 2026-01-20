@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:milk_core/milk_core.dart';
 
-/// QR code scanner screen
+/// QR code scanner screen for delivery verification
 class QrScannerScreen extends StatefulWidget {
   final String orderId;
 
@@ -16,6 +16,8 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   MobileScannerController? _controller;
   bool _isScanned = false;
+  String? _scannedCustomerId;
+  final _litersController = TextEditingController(text: '1.0');
 
   @override
   void initState() {
@@ -29,6 +31,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   @override
   void dispose() {
     _controller?.dispose();
+    _litersController.dispose();
     super.dispose();
   }
 
@@ -49,59 +52,157 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   void _validateAndConfirm(String code) {
-    // TODO: Validate QR code with backend
-    // For now, accept any QR code
+    // The QR code is the customer's user ID
+    _scannedCustomerId = code;
     
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        icon: const Icon(
-          Icons.check_circle,
-          color: AppTheme.successColor,
-          size: 64,
-        ),
-        title: const Text('QR Verified!'),
-        content: const Text(
-          'Customer QR code verified successfully. Mark this delivery as complete?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() => _isScanned = false);
-              _controller?.start();
-            },
-            child: const Text('Scan Again'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(
+            Icons.check_circle,
+            color: AppTheme.successColor,
+            size: 64,
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _confirmDelivery();
-            },
-            child: const Text('Confirm Delivery'),
+          title: const Text('QR Verified!'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter the liters you delivered:'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _litersController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Liters Delivered',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.water_drop),
+                  suffixText: 'L',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [0.5, 1.0, 1.5, 2.0].map((liters) {
+                  return ActionChip(
+                    label: Text('$liters L'),
+                    onPressed: () {
+                      _litersController.text = liters.toString();
+                      setDialogState(() {});
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() => _isScanned = false);
+                _controller?.start();
+              },
+              child: const Text('Scan Again'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _confirmDelivery();
+              },
+              child: const Text('Confirm & Deduct Liters'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _confirmDelivery() {
-    // TODO: Update delivery status in Supabase
-    context.go('/routes');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 8),
-            Text('Delivery confirmed successfully!'),
-          ],
-        ),
-        backgroundColor: AppTheme.successColor,
-      ),
-    );
+  Future<void> _confirmDelivery() async {
+    final liters = double.tryParse(_litersController.text) ?? 0;
+    if (liters <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter valid liters'), backgroundColor: Colors.red),
+      );
+      setState(() => _isScanned = false);
+      _controller?.start();
+      return;
+    }
+
+    try {
+      // Get customer's current liters
+      final profile = await SupabaseService.client
+          .from('profiles')
+          .select('liters_remaining, full_name')
+          .eq('id', _scannedCustomerId!)
+          .single();
+      
+      final currentLiters = (profile['liters_remaining'] as num?)?.toDouble() ?? 0.0;
+      final customerName = profile['full_name'] ?? 'Customer';
+      
+      if (currentLiters < liters) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$customerName only has ${currentLiters.toStringAsFixed(1)} liters remaining!'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        // Still allow delivery but show warning
+      }
+
+      // Deduct liters from customer's quota
+      await SupabaseService.client
+          .from('profiles')
+          .update({
+            'liters_remaining': currentLiters - liters,
+          })
+          .eq('id', _scannedCustomerId!);
+
+      // Update delivery record
+      await SupabaseService.client
+          .from('deliveries')
+          .update({
+            'status': 'delivered',
+            'delivered_at': DateTime.now().toIso8601String(),
+            'qr_scanned': true,
+            'liters_delivered': liters,
+          })
+          .eq('order_id', widget.orderId);
+
+      // Update order status
+      await SupabaseService.client
+          .from('orders')
+          .update({'status': 'delivered'})
+          .eq('id', widget.orderId);
+
+      if (mounted) {
+        context.go('/routes');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('Delivered ${liters.toStringAsFixed(1)}L to $customerName!'),
+              ],
+            ),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isScanned = false);
+        _controller?.start();
+      }
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {

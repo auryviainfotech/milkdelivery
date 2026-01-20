@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:milk_core/milk_core.dart';
-import '../../../services/razorpay_service.dart';
 import '../../../shared/providers/auth_providers.dart';
 
 /// Shop screen for one-time purchases (Butter, Ghee, Paneer, etc.)
-/// These products are NOT part of the subscription wallet system
-/// Payment is via UPI/Card/Net Banking through Razorpay
+/// These products are NOT part of the subscription system
+/// Payment is Cash on Delivery (COD) only
 class ShopScreen extends ConsumerStatefulWidget {
   const ShopScreen({super.key});
 
@@ -19,25 +17,6 @@ class ShopScreen extends ConsumerStatefulWidget {
 class _ShopScreenState extends ConsumerState<ShopScreen> {
   final Map<String, int> _cart = {};
   bool _isProcessing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initRazorpay();
-  }
-
-  void _initRazorpay() {
-    RazorpayService.init(
-      onSuccess: _handlePaymentSuccess,
-      onError: _handlePaymentError,
-    );
-  }
-
-  @override
-  void dispose() {
-    RazorpayService.dispose();
-    super.dispose();
-  }
 
   double get _cartTotal {
     double total = 0;
@@ -53,18 +32,43 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
 
   int get _cartItemCount => _cart.values.fold(0, (a, b) => a + b);
 
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    // Create one-time order
-    final user = SupabaseService.currentUser;
-    if (user == null) return;
+  void _placeOrder() async {
+    if (_cartTotal <= 0) return;
+
+    setState(() => _isProcessing = true);
 
     try {
-      // Create the order
+      final user = SupabaseService.currentUser;
+      if (user == null) throw Exception('Not logged in');
+
+      // Get user address
+      final profile = await SupabaseService.client
+          .from('profiles')
+          .select('address')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      final address = profile?['address'] as String? ?? '';
+      if (address.isEmpty) {
+        if (mounted) {
+          setState(() => _isProcessing = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please update your address in profile first')),
+          );
+        }
+        return;
+      }
+
+      // Create the order with COD payment method
       final orderResponse = await SupabaseService.client.from('orders').insert({
         'user_id': user.id,
         'delivery_date': DateTime.now().add(const Duration(days: 1)).toIso8601String().split('T')[0],
         'status': 'pending',
         'order_type': 'one_time',
+        'payment_method': 'cod',
+        'payment_status': 'pending',
+        'total_amount': _cartTotal,
+        'delivery_address': address,
       }).select().single();
 
       final orderId = orderResponse['id'] as String;
@@ -88,7 +92,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           _isProcessing = false;
           _cart.clear();
         });
-        _showSuccessDialog(response.paymentId ?? 'N/A');
+        _showSuccessDialog();
       }
     } catch (e) {
       if (mounted) {
@@ -100,19 +104,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
     }
   }
 
-  void _handlePaymentError(PaymentFailureResponse response) {
-    if (mounted) {
-      setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment failed: ${response.message ?? "Unknown error"}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _showSuccessDialog(String paymentId) {
+  void _showSuccessDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -127,10 +119,22 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
               ),
-              child: Text('Payment ID: $paymentId', style: const TextStyle(fontSize: 12)),
+              child: Row(
+                children: [
+                  Icon(Icons.payments_outlined, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cash on Delivery\nPay when you receive your order',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -145,37 +149,6 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         ],
       ),
     );
-  }
-
-  void _checkout() async {
-    if (_cartTotal <= 0) return;
-
-    setState(() => _isProcessing = true);
-
-    try {
-      final user = SupabaseService.currentUser;
-      final profile = await SupabaseService.client
-          .from('profiles')
-          .select('full_name, phone')
-          .eq('id', user?.id ?? '')
-          .maybeSingle();
-
-      RazorpayService.openCheckout(
-        amount: _cartTotal,
-        orderId: 'SHOP${DateTime.now().millisecondsSinceEpoch}',
-        description: 'One-time Purchase',
-        email: user?.email ?? 'customer@milkdelivery.com',
-        phone: profile?['phone']?.toString().replaceAll('+91', '') ?? '',
-        name: profile?['full_name'] ?? '',
-      );
-    } catch (e) {
-      setState(() => _isProcessing = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
   }
 
   @override
@@ -357,26 +330,53 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 ],
               ),
               child: SafeArea(
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _isProcessing ? null : _checkout,
-                    icon: _isProcessing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.payment),
-                    label: Text(
-                      _isProcessing
-                          ? 'Processing...'
-                          : 'Pay ₹${_cartTotal.toStringAsFixed(0)}',
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // COD info banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.local_shipping, color: Colors.orange.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Cash on Delivery • Pay when you receive',
+                              style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _isProcessing ? null : _placeOrder,
+                        icon: _isProcessing
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.shopping_bag),
+                        label: Text(
+                          _isProcessing
+                              ? 'Placing Order...'
+                              : 'Place Order • ₹${_cartTotal.toStringAsFixed(0)}',
+                        ),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             )
@@ -427,6 +427,21 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                     fontSize: 18,
                     color: Theme.of(context).colorScheme.primary,
                   ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.payments_outlined, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Text('Payment: Cash on Delivery', style: TextStyle(color: Colors.orange.shade700, fontWeight: FontWeight.w500)),
+                  ],
                 ),
               ),
             ],

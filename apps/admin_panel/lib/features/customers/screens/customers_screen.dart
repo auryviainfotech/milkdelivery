@@ -28,18 +28,22 @@ final customerSubscriptionsProvider = FutureProvider<Map<String, int>>((ref) asy
   return counts;
 });
 
-/// Provider for wallet balances
-final customerWalletsProvider = FutureProvider<Map<String, double>>((ref) async {
+/// Provider for wallet balances - Now showing liters remaining
+final customerLitersProvider = FutureProvider<Map<String, Map<String, dynamic>>>((ref) async {
   final response = await SupabaseService.client
-      .from('wallets')
-      .select('user_id, balance');
+      .from('profiles')
+      .select('id, liters_remaining, subscription_status')
+      .eq('role', 'customer');
   
-  final Map<String, double> balances = {};
-  for (final wallet in response) {
-    final userId = wallet['user_id']?.toString() ?? '';
-    balances[userId] = (wallet['balance'] as num?)?.toDouble() ?? 0.0;
+  final Map<String, Map<String, dynamic>> data = {};
+  for (final profile in response) {
+    final userId = profile['id']?.toString() ?? '';
+    data[userId] = {
+      'liters': (profile['liters_remaining'] as num?)?.toDouble() ?? 0.0,
+      'status': profile['subscription_status'] ?? 'inactive',
+    };
   }
-  return balances;
+  return data;
 });
 
 /// Customers Management Screen with Real Data
@@ -59,7 +63,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final customersAsync = ref.watch(customersProvider);
     final subscriptionsAsync = ref.watch(customerSubscriptionsProvider);
-    final walletsAsync = ref.watch(customerWalletsProvider);
+    final litersAsync = ref.watch(customerLitersProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -84,7 +88,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             onPressed: () {
               ref.invalidate(customersProvider);
               ref.invalidate(customerSubscriptionsProvider);
-              ref.invalidate(customerWalletsProvider);
+              ref.invalidate(customerLitersProvider);
             },
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -97,7 +101,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         child: customersAsync.when(
           data: (customers) {
             final subscriptionCounts = subscriptionsAsync.valueOrNull ?? {};
-            final walletBalances = walletsAsync.valueOrNull ?? {};
+            final litersData = litersAsync.valueOrNull ?? {};
             
             // Filter customers based on search
             final filtered = _searchQuery.isEmpty
@@ -138,15 +142,17 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                   columns: const [
                     DataColumn2(label: Text('Customer'), size: ColumnSize.L),
                     DataColumn2(label: Text('Phone'), size: ColumnSize.M),
-                    DataColumn2(label: Text('Subscriptions'), size: ColumnSize.S),
-                    DataColumn2(label: Text('Wallet'), size: ColumnSize.S),
+                    DataColumn2(label: Text('Status'), size: ColumnSize.S),
+                    DataColumn2(label: Text('Liters'), size: ColumnSize.S),
                     DataColumn2(label: Text('Location'), size: ColumnSize.S),
                     DataColumn2(label: Text('Actions'), size: ColumnSize.M),
                   ],
                   rows: filtered.map((customer) {
                     final id = customer['id']?.toString() ?? '';
                     final subCount = subscriptionCounts[id] ?? 0;
-                    final walletBalance = walletBalances[id] ?? 0.0;
+                    final customerLiters = litersData[id];
+                    final litersRemaining = customerLiters?['liters'] ?? 0.0;
+                    final subStatus = customerLiters?['status'] ?? 'inactive';
                     final hasLocation = customer['latitude'] != null && customer['longitude'] != null;
                     
                     return DataRow2(
@@ -173,27 +179,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         ),
                         DataCell(Text(customer['phone'] ?? '-')),
                         DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: subCount > 0 ? colorScheme.primaryContainer : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '$subCount',
-                              style: TextStyle(
-                                color: subCount > 0 ? colorScheme.onPrimaryContainer : Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
+                          _buildStatusChip(subStatus),
                         ),
                         DataCell(
                           Text(
-                            '₹${walletBalance.toStringAsFixed(0)}',
+                            '${litersRemaining.toStringAsFixed(1)} L',
                             style: TextStyle(
                               fontWeight: FontWeight.w500,
-                              color: walletBalance > 0 ? AppTheme.successColor : colorScheme.onSurfaceVariant,
+                              color: litersRemaining > 0 ? AppTheme.successColor : colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -208,14 +201,14 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                           Row(
                             children: [
                               IconButton(
-                                onPressed: () => _viewCustomerDetails(customer, subCount, walletBalance),
+                                onPressed: () => _viewCustomerDetails(customer, subCount, litersRemaining, subStatus),
                                 icon: const Icon(Icons.visibility_outlined),
                                 tooltip: 'View Details',
                               ),
                               IconButton(
-                                onPressed: () => _addWalletBalance(customer),
-                                icon: const Icon(Icons.account_balance_wallet_outlined),
-                                tooltip: 'Add Balance',
+                                onPressed: () => _addLiters(customer),
+                                icon: const Icon(Icons.water_drop_outlined),
+                                tooltip: 'Add Liters',
                               ),
                             ],
                           ),
@@ -234,7 +227,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     );
   }
 
-  void _viewCustomerDetails(Map<String, dynamic> customer, int subCount, double walletBalance) {
+  void _viewCustomerDetails(Map<String, dynamic> customer, int subCount, double litersRemaining, String subStatus) {
     final hasLocation = customer['latitude'] != null && customer['longitude'] != null;
     
     showDialog(
@@ -250,7 +243,10 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               _buildInfoRow(Icons.phone, 'Phone', customer['phone'] ?? '-'),
               _buildInfoRow(Icons.location_on, 'Address', customer['address'] ?? '-'),
               _buildInfoRow(Icons.subscriptions, 'Active Subscriptions', '$subCount'),
-              _buildInfoRow(Icons.account_balance_wallet, 'Wallet Balance', '₹${walletBalance.toStringAsFixed(2)}'),
+              _buildInfoRow(Icons.water_drop, 'Liters Remaining', '${litersRemaining.toStringAsFixed(1)} L'),
+              _buildInfoRow(Icons.check_circle, 'Subscription Status', subStatus.toUpperCase()),
+              if (customer['qr_code'] != null)
+                _buildInfoRow(Icons.qr_code, 'QR Code', customer['qr_code'] ?? '-'),
               if (hasLocation)
                 _buildInfoRow(
                   Icons.my_location,
@@ -266,6 +262,36 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
             child: const Text('Close'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String status) {
+    Color color;
+    switch (status) {
+      case 'active':
+        color = AppTheme.successColor;
+        break;
+      case 'pending':
+        color = Colors.orange;
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -291,27 +317,28 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     );
   }
 
-  void _addWalletBalance(Map<String, dynamic> customer) {
-    final amountController = TextEditingController();
+  void _addLiters(Map<String, dynamic> customer) {
+    final litersController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Add Balance - ${customer['full_name']}'),
+        title: Text('Add Liters - ${customer['full_name']}'),
         content: SizedBox(
           width: 300,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Enter amount to add to wallet:'),
+              const Text('Enter liters to add to customer quota:'),
               const SizedBox(height: 16),
               TextField(
-                controller: amountController,
+                controller: litersController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Amount (₹)',
-                  border: OutlineInputBorder(),
-                  prefixText: '₹ ',
+                decoration: InputDecoration(
+                  labelText: 'Liters to Add',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.water_drop),
+                  suffixText: 'L',
                 ),
               ),
             ],
@@ -324,26 +351,40 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ),
           FilledButton(
             onPressed: () async {
-              final amount = double.tryParse(amountController.text) ?? 0;
-              if (amount > 0) {
-                // Add to wallet
+              final liters = double.tryParse(litersController.text) ?? 0;
+              if (liters > 0) {
                 final userId = customer['id'];
-                await SupabaseService.client.from('wallets').upsert({
-                  'user_id': userId,
-                  'balance': amount,
-                }, onConflict: 'user_id');
                 
-                ref.invalidate(customerWalletsProvider);
+                // Get current liters and add to it
+                final current = await SupabaseService.client
+                    .from('profiles')
+                    .select('liters_remaining')
+                    .eq('id', userId)
+                    .single();
+                final currentLiters = (current['liters_remaining'] as num?)?.toDouble() ?? 0.0;
+                
+                await SupabaseService.client
+                    .from('profiles')
+                    .update({
+                      'liters_remaining': currentLiters + liters,
+                      'subscription_status': 'active',
+                    })
+                    .eq('id', userId);
+                
+                ref.invalidate(customerLitersProvider);
                 
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('₹${amount.toStringAsFixed(0)} added to wallet')),
+                    SnackBar(
+                      content: Text('${liters.toStringAsFixed(1)} liters added!'),
+                      backgroundColor: Colors.green,
+                    ),
                   );
                 }
               }
             },
-            child: const Text('Add Balance'),
+            child: const Text('Add Liters'),
           ),
         ],
       ),

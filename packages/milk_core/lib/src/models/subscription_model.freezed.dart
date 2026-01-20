@@ -280,14 +280,31 @@ SubscriptionModel _$SubscriptionModelFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$SubscriptionModel {
   String get id => throw _privateConstructorUsedError;
+  @JsonKey(name: 'user_id')
   String get userId => throw _privateConstructorUsedError;
-  String get planId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'plan_id')
+  String? get planId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'product_id')
+  String? get productId => throw _privateConstructorUsedError;
   int get quantity => throw _privateConstructorUsedError;
+  @JsonKey(name: 'monthly_liters')
+  int get monthlyLiters => throw _privateConstructorUsedError;
+  @JsonKey(name: 'start_date')
   DateTime get startDate => throw _privateConstructorUsedError;
-  DateTime get endDate => throw _privateConstructorUsedError;
+  @JsonKey(name: 'end_date')
+  DateTime? get endDate => throw _privateConstructorUsedError;
   SubscriptionStatus get status => throw _privateConstructorUsedError;
+  @JsonKey(name: 'skip_dates')
   List<DateTime> get skipDates => throw _privateConstructorUsedError;
+  @JsonKey(name: 'skip_weekends')
+  bool get skipWeekends => throw _privateConstructorUsedError;
+  @JsonKey(name: 'delivery_address')
+  String? get deliveryAddress => throw _privateConstructorUsedError;
+  @JsonKey(name: 'time_slot')
+  String get timeSlot => throw _privateConstructorUsedError;
+  @JsonKey(name: 'created_before_cutoff')
   bool get createdBeforeCutoff => throw _privateConstructorUsedError;
+  @JsonKey(name: 'created_at')
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
   /// Serializes this SubscriptionModel to a JSON map.
@@ -308,15 +325,20 @@ abstract class $SubscriptionModelCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String userId,
-      String planId,
+      @JsonKey(name: 'user_id') String userId,
+      @JsonKey(name: 'plan_id') String? planId,
+      @JsonKey(name: 'product_id') String? productId,
       int quantity,
-      DateTime startDate,
-      DateTime endDate,
+      @JsonKey(name: 'monthly_liters') int monthlyLiters,
+      @JsonKey(name: 'start_date') DateTime startDate,
+      @JsonKey(name: 'end_date') DateTime? endDate,
       SubscriptionStatus status,
-      List<DateTime> skipDates,
-      bool createdBeforeCutoff,
-      DateTime? createdAt});
+      @JsonKey(name: 'skip_dates') List<DateTime> skipDates,
+      @JsonKey(name: 'skip_weekends') bool skipWeekends,
+      @JsonKey(name: 'delivery_address') String? deliveryAddress,
+      @JsonKey(name: 'time_slot') String timeSlot,
+      @JsonKey(name: 'created_before_cutoff') bool createdBeforeCutoff,
+      @JsonKey(name: 'created_at') DateTime? createdAt});
 }
 
 /// @nodoc
@@ -336,12 +358,17 @@ class _$SubscriptionModelCopyWithImpl<$Res, $Val extends SubscriptionModel>
   $Res call({
     Object? id = null,
     Object? userId = null,
-    Object? planId = null,
+    Object? planId = freezed,
+    Object? productId = freezed,
     Object? quantity = null,
+    Object? monthlyLiters = null,
     Object? startDate = null,
-    Object? endDate = null,
+    Object? endDate = freezed,
     Object? status = null,
     Object? skipDates = null,
+    Object? skipWeekends = null,
+    Object? deliveryAddress = freezed,
+    Object? timeSlot = null,
     Object? createdBeforeCutoff = null,
     Object? createdAt = freezed,
   }) {
@@ -354,22 +381,30 @@ class _$SubscriptionModelCopyWithImpl<$Res, $Val extends SubscriptionModel>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String,
-      planId: null == planId
+      planId: freezed == planId
           ? _value.planId
           : planId // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
+      productId: freezed == productId
+          ? _value.productId
+          : productId // ignore: cast_nullable_to_non_nullable
+              as String?,
       quantity: null == quantity
           ? _value.quantity
           : quantity // ignore: cast_nullable_to_non_nullable
+              as int,
+      monthlyLiters: null == monthlyLiters
+          ? _value.monthlyLiters
+          : monthlyLiters // ignore: cast_nullable_to_non_nullable
               as int,
       startDate: null == startDate
           ? _value.startDate
           : startDate // ignore: cast_nullable_to_non_nullable
               as DateTime,
-      endDate: null == endDate
+      endDate: freezed == endDate
           ? _value.endDate
           : endDate // ignore: cast_nullable_to_non_nullable
-              as DateTime,
+              as DateTime?,
       status: null == status
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
@@ -378,6 +413,18 @@ class _$SubscriptionModelCopyWithImpl<$Res, $Val extends SubscriptionModel>
           ? _value.skipDates
           : skipDates // ignore: cast_nullable_to_non_nullable
               as List<DateTime>,
+      skipWeekends: null == skipWeekends
+          ? _value.skipWeekends
+          : skipWeekends // ignore: cast_nullable_to_non_nullable
+              as bool,
+      deliveryAddress: freezed == deliveryAddress
+          ? _value.deliveryAddress
+          : deliveryAddress // ignore: cast_nullable_to_non_nullable
+              as String?,
+      timeSlot: null == timeSlot
+          ? _value.timeSlot
+          : timeSlot // ignore: cast_nullable_to_non_nullable
+              as String,
       createdBeforeCutoff: null == createdBeforeCutoff
           ? _value.createdBeforeCutoff
           : createdBeforeCutoff // ignore: cast_nullable_to_non_nullable
@@ -400,15 +447,20 @@ abstract class _$$SubscriptionModelImplCopyWith<$Res>
   @useResult
   $Res call(
       {String id,
-      String userId,
-      String planId,
+      @JsonKey(name: 'user_id') String userId,
+      @JsonKey(name: 'plan_id') String? planId,
+      @JsonKey(name: 'product_id') String? productId,
       int quantity,
-      DateTime startDate,
-      DateTime endDate,
+      @JsonKey(name: 'monthly_liters') int monthlyLiters,
+      @JsonKey(name: 'start_date') DateTime startDate,
+      @JsonKey(name: 'end_date') DateTime? endDate,
       SubscriptionStatus status,
-      List<DateTime> skipDates,
-      bool createdBeforeCutoff,
-      DateTime? createdAt});
+      @JsonKey(name: 'skip_dates') List<DateTime> skipDates,
+      @JsonKey(name: 'skip_weekends') bool skipWeekends,
+      @JsonKey(name: 'delivery_address') String? deliveryAddress,
+      @JsonKey(name: 'time_slot') String timeSlot,
+      @JsonKey(name: 'created_before_cutoff') bool createdBeforeCutoff,
+      @JsonKey(name: 'created_at') DateTime? createdAt});
 }
 
 /// @nodoc
@@ -426,12 +478,17 @@ class __$$SubscriptionModelImplCopyWithImpl<$Res>
   $Res call({
     Object? id = null,
     Object? userId = null,
-    Object? planId = null,
+    Object? planId = freezed,
+    Object? productId = freezed,
     Object? quantity = null,
+    Object? monthlyLiters = null,
     Object? startDate = null,
-    Object? endDate = null,
+    Object? endDate = freezed,
     Object? status = null,
     Object? skipDates = null,
+    Object? skipWeekends = null,
+    Object? deliveryAddress = freezed,
+    Object? timeSlot = null,
     Object? createdBeforeCutoff = null,
     Object? createdAt = freezed,
   }) {
@@ -444,22 +501,30 @@ class __$$SubscriptionModelImplCopyWithImpl<$Res>
           ? _value.userId
           : userId // ignore: cast_nullable_to_non_nullable
               as String,
-      planId: null == planId
+      planId: freezed == planId
           ? _value.planId
           : planId // ignore: cast_nullable_to_non_nullable
-              as String,
+              as String?,
+      productId: freezed == productId
+          ? _value.productId
+          : productId // ignore: cast_nullable_to_non_nullable
+              as String?,
       quantity: null == quantity
           ? _value.quantity
           : quantity // ignore: cast_nullable_to_non_nullable
+              as int,
+      monthlyLiters: null == monthlyLiters
+          ? _value.monthlyLiters
+          : monthlyLiters // ignore: cast_nullable_to_non_nullable
               as int,
       startDate: null == startDate
           ? _value.startDate
           : startDate // ignore: cast_nullable_to_non_nullable
               as DateTime,
-      endDate: null == endDate
+      endDate: freezed == endDate
           ? _value.endDate
           : endDate // ignore: cast_nullable_to_non_nullable
-              as DateTime,
+              as DateTime?,
       status: null == status
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
@@ -468,6 +533,18 @@ class __$$SubscriptionModelImplCopyWithImpl<$Res>
           ? _value._skipDates
           : skipDates // ignore: cast_nullable_to_non_nullable
               as List<DateTime>,
+      skipWeekends: null == skipWeekends
+          ? _value.skipWeekends
+          : skipWeekends // ignore: cast_nullable_to_non_nullable
+              as bool,
+      deliveryAddress: freezed == deliveryAddress
+          ? _value.deliveryAddress
+          : deliveryAddress // ignore: cast_nullable_to_non_nullable
+              as String?,
+      timeSlot: null == timeSlot
+          ? _value.timeSlot
+          : timeSlot // ignore: cast_nullable_to_non_nullable
+              as String,
       createdBeforeCutoff: null == createdBeforeCutoff
           ? _value.createdBeforeCutoff
           : createdBeforeCutoff // ignore: cast_nullable_to_non_nullable
@@ -485,15 +562,20 @@ class __$$SubscriptionModelImplCopyWithImpl<$Res>
 class _$SubscriptionModelImpl implements _SubscriptionModel {
   const _$SubscriptionModelImpl(
       {required this.id,
-      required this.userId,
-      required this.planId,
+      @JsonKey(name: 'user_id') required this.userId,
+      @JsonKey(name: 'plan_id') this.planId,
+      @JsonKey(name: 'product_id') this.productId,
       this.quantity = 1,
-      required this.startDate,
-      required this.endDate,
-      this.status = SubscriptionStatus.active,
-      final List<DateTime> skipDates = const [],
-      this.createdBeforeCutoff = true,
-      this.createdAt})
+      @JsonKey(name: 'monthly_liters') this.monthlyLiters = 30,
+      @JsonKey(name: 'start_date') required this.startDate,
+      @JsonKey(name: 'end_date') this.endDate,
+      this.status = SubscriptionStatus.pending,
+      @JsonKey(name: 'skip_dates') final List<DateTime> skipDates = const [],
+      @JsonKey(name: 'skip_weekends') this.skipWeekends = false,
+      @JsonKey(name: 'delivery_address') this.deliveryAddress,
+      @JsonKey(name: 'time_slot') this.timeSlot = 'morning',
+      @JsonKey(name: 'created_before_cutoff') this.createdBeforeCutoff = true,
+      @JsonKey(name: 'created_at') this.createdAt})
       : _skipDates = skipDates;
 
   factory _$SubscriptionModelImpl.fromJson(Map<String, dynamic> json) =>
@@ -502,22 +584,32 @@ class _$SubscriptionModelImpl implements _SubscriptionModel {
   @override
   final String id;
   @override
+  @JsonKey(name: 'user_id')
   final String userId;
   @override
-  final String planId;
+  @JsonKey(name: 'plan_id')
+  final String? planId;
+  @override
+  @JsonKey(name: 'product_id')
+  final String? productId;
   @override
   @JsonKey()
   final int quantity;
   @override
+  @JsonKey(name: 'monthly_liters')
+  final int monthlyLiters;
+  @override
+  @JsonKey(name: 'start_date')
   final DateTime startDate;
   @override
-  final DateTime endDate;
+  @JsonKey(name: 'end_date')
+  final DateTime? endDate;
   @override
   @JsonKey()
   final SubscriptionStatus status;
   final List<DateTime> _skipDates;
   @override
-  @JsonKey()
+  @JsonKey(name: 'skip_dates')
   List<DateTime> get skipDates {
     if (_skipDates is EqualUnmodifiableListView) return _skipDates;
     // ignore: implicit_dynamic_type
@@ -525,14 +617,24 @@ class _$SubscriptionModelImpl implements _SubscriptionModel {
   }
 
   @override
-  @JsonKey()
+  @JsonKey(name: 'skip_weekends')
+  final bool skipWeekends;
+  @override
+  @JsonKey(name: 'delivery_address')
+  final String? deliveryAddress;
+  @override
+  @JsonKey(name: 'time_slot')
+  final String timeSlot;
+  @override
+  @JsonKey(name: 'created_before_cutoff')
   final bool createdBeforeCutoff;
   @override
+  @JsonKey(name: 'created_at')
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'SubscriptionModel(id: $id, userId: $userId, planId: $planId, quantity: $quantity, startDate: $startDate, endDate: $endDate, status: $status, skipDates: $skipDates, createdBeforeCutoff: $createdBeforeCutoff, createdAt: $createdAt)';
+    return 'SubscriptionModel(id: $id, userId: $userId, planId: $planId, productId: $productId, quantity: $quantity, monthlyLiters: $monthlyLiters, startDate: $startDate, endDate: $endDate, status: $status, skipDates: $skipDates, skipWeekends: $skipWeekends, deliveryAddress: $deliveryAddress, timeSlot: $timeSlot, createdBeforeCutoff: $createdBeforeCutoff, createdAt: $createdAt)';
   }
 
   @override
@@ -543,14 +645,24 @@ class _$SubscriptionModelImpl implements _SubscriptionModel {
             (identical(other.id, id) || other.id == id) &&
             (identical(other.userId, userId) || other.userId == userId) &&
             (identical(other.planId, planId) || other.planId == planId) &&
+            (identical(other.productId, productId) ||
+                other.productId == productId) &&
             (identical(other.quantity, quantity) ||
                 other.quantity == quantity) &&
+            (identical(other.monthlyLiters, monthlyLiters) ||
+                other.monthlyLiters == monthlyLiters) &&
             (identical(other.startDate, startDate) ||
                 other.startDate == startDate) &&
             (identical(other.endDate, endDate) || other.endDate == endDate) &&
             (identical(other.status, status) || other.status == status) &&
             const DeepCollectionEquality()
                 .equals(other._skipDates, _skipDates) &&
+            (identical(other.skipWeekends, skipWeekends) ||
+                other.skipWeekends == skipWeekends) &&
+            (identical(other.deliveryAddress, deliveryAddress) ||
+                other.deliveryAddress == deliveryAddress) &&
+            (identical(other.timeSlot, timeSlot) ||
+                other.timeSlot == timeSlot) &&
             (identical(other.createdBeforeCutoff, createdBeforeCutoff) ||
                 other.createdBeforeCutoff == createdBeforeCutoff) &&
             (identical(other.createdAt, createdAt) ||
@@ -564,11 +676,16 @@ class _$SubscriptionModelImpl implements _SubscriptionModel {
       id,
       userId,
       planId,
+      productId,
       quantity,
+      monthlyLiters,
       startDate,
       endDate,
       status,
       const DeepCollectionEquality().hash(_skipDates),
+      skipWeekends,
+      deliveryAddress,
+      timeSlot,
       createdBeforeCutoff,
       createdAt);
 
@@ -592,14 +709,20 @@ class _$SubscriptionModelImpl implements _SubscriptionModel {
 abstract class _SubscriptionModel implements SubscriptionModel {
   const factory _SubscriptionModel(
       {required final String id,
-      required final String userId,
-      required final String planId,
+      @JsonKey(name: 'user_id') required final String userId,
+      @JsonKey(name: 'plan_id') final String? planId,
+      @JsonKey(name: 'product_id') final String? productId,
       final int quantity,
-      required final DateTime startDate,
-      required final DateTime endDate,
+      @JsonKey(name: 'monthly_liters') final int monthlyLiters,
+      @JsonKey(name: 'start_date') required final DateTime startDate,
+      @JsonKey(name: 'end_date') final DateTime? endDate,
       final SubscriptionStatus status,
-      final List<DateTime> skipDates,
-      final bool createdBeforeCutoff,
+      @JsonKey(name: 'skip_dates') final List<DateTime> skipDates,
+      @JsonKey(name: 'skip_weekends') final bool skipWeekends,
+      @JsonKey(name: 'delivery_address') final String? deliveryAddress,
+      @JsonKey(name: 'time_slot') final String timeSlot,
+      @JsonKey(name: 'created_before_cutoff') final bool createdBeforeCutoff,
+      @JsonKey(name: 'created_at')
       final DateTime? createdAt}) = _$SubscriptionModelImpl;
 
   factory _SubscriptionModel.fromJson(Map<String, dynamic> json) =
@@ -608,22 +731,44 @@ abstract class _SubscriptionModel implements SubscriptionModel {
   @override
   String get id;
   @override
+  @JsonKey(name: 'user_id')
   String get userId;
   @override
-  String get planId;
+  @JsonKey(name: 'plan_id')
+  String? get planId;
+  @override
+  @JsonKey(name: 'product_id')
+  String? get productId;
   @override
   int get quantity;
   @override
+  @JsonKey(name: 'monthly_liters')
+  int get monthlyLiters;
+  @override
+  @JsonKey(name: 'start_date')
   DateTime get startDate;
   @override
-  DateTime get endDate;
+  @JsonKey(name: 'end_date')
+  DateTime? get endDate;
   @override
   SubscriptionStatus get status;
   @override
+  @JsonKey(name: 'skip_dates')
   List<DateTime> get skipDates;
   @override
+  @JsonKey(name: 'skip_weekends')
+  bool get skipWeekends;
+  @override
+  @JsonKey(name: 'delivery_address')
+  String? get deliveryAddress;
+  @override
+  @JsonKey(name: 'time_slot')
+  String get timeSlot;
+  @override
+  @JsonKey(name: 'created_before_cutoff')
   bool get createdBeforeCutoff;
   @override
+  @JsonKey(name: 'created_at')
   DateTime? get createdAt;
 
   /// Create a copy of SubscriptionModel

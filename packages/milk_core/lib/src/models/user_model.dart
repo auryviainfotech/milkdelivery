@@ -20,10 +20,14 @@ class UserModel with _$UserModel {
     String? address,
     double? latitude,
     double? longitude,
+    @JsonKey(name: 'qr_code') String? qrCode,
     @Default(UserRole.customer) UserRole role,
+    @JsonKey(name: 'liters_remaining') @Default(0.0) double litersRemaining,
+    @JsonKey(name: 'subscription_status') @Default('inactive') String subscriptionStatus,
     @JsonKey(name: 'created_at') DateTime? createdAt,
   }) = _UserModel;
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
       _$UserModelFromJson(json);
 }
+

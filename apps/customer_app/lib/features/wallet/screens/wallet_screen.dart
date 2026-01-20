@@ -1,492 +1,328 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
-import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
-import '../../../services/razorpay_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
-/// Wallet screen with balance and Razorpay payments
-class WalletScreen extends ConsumerStatefulWidget {
-  const WalletScreen({super.key});
+/// Provider for quota data
+final quotaDataProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final user = SupabaseService.currentUser;
+  if (user == null) return null;
+  
+  final response = await SupabaseService.client
+      .from('profiles')
+      .select('liters_remaining, subscription_status, full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+  return response;
+});
 
-  @override
-  ConsumerState<WalletScreen> createState() => _WalletScreenState();
-}
-
-class _WalletScreenState extends ConsumerState<WalletScreen> {
-  final _customAmountController = TextEditingController();
-  bool _isLoading = false;
-  double _pendingAmount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _initRazorpay();
-  }
-
-  void _initRazorpay() {
-    RazorpayService.init(
-      onSuccess: _handlePaymentSuccess,
-      onError: _handlePaymentError,
-    );
-  }
+/// Liters Quota Screen - Shows remaining liters and QR code for delivery verification
+/// This screen replaces the old Wallet screen
+class LitersQuotaScreen extends ConsumerWidget {
+  const LitersQuotaScreen({super.key});
 
   @override
-  void dispose() {
-    _customAmountController.dispose();
-    RazorpayService.dispose();
-    super.dispose();
-  }
-
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    // Add money to wallet after successful payment
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final user = SupabaseService.currentUser;
-    if (user != null) {
-      try {
-        await WalletRepository.creditWallet(
-          userId: user.id,
-          amount: _pendingAmount,
-          description: 'Wallet recharge via Razorpay',
-          paymentId: response.paymentId,
-        );
-      } catch (e) {
-        print('Error crediting wallet: $e');
-      }
-    }
-    
-    if (mounted) {
-      setState(() => _isLoading = false);
-      ref.invalidate(walletProvider);
-      
-      // Show success dialog
-      _showSuccessDialog(_pendingAmount, response.paymentId ?? 'N/A');
-    }
-    _pendingAmount = 0;
-  }
+    final quotaAsync = ref.watch(quotaDataProvider);
 
-  void _handlePaymentError(PaymentFailureResponse response) {
-    if (mounted) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment failed: ${response.message ?? "Unknown error"}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-    _pendingAmount = 0;
-  }
-
-  void _showSuccessDialog(double amount, String paymentId) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.check_circle, color: Colors.green, size: 64),
-        title: const Text('Money Added!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '₹${amount.toStringAsFixed(0)}',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(quotaDataProvider),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // App Bar
+            SliverAppBar(
+              expandedHeight: 0,
+              floating: true,
+              backgroundColor: colorScheme.surface,
+              surfaceTintColor: Colors.transparent,
+              title: const Text('My Quota'),
+              centerTitle: true,
             ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  const Text('✅ Added to Wallet', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('Payment ID: $paymentId', style: const TextStyle(fontSize: 12)),
-                ],
+            
+            SliverToBoxAdapter(
+              child: quotaAsync.when(
+                loading: () => const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator())),
+                error: (e, _) => Center(child: Text('Error: $e')),
+                data: (data) {
+                  final litersRemaining = (data?['liters_remaining'] as num?)?.toDouble() ?? 0.0;
+                  final subscriptionStatus = data?['subscription_status'] as String? ?? 'inactive';
+                  final qrCode = user?.id ?? 'NO_USER';
+                  
+                  return Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        // Liters Display Card
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                const Color(0xFF1E88E5),
+                                const Color(0xFF1565C0),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E88E5).withOpacity(0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white24,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(Icons.water_drop, color: Colors.white, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Text(
+                                    'Liters Remaining',
+                                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    litersRemaining.toStringAsFixed(1),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 64,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  const Padding(
+                                    padding: EdgeInsets.only(bottom: 10, left: 4),
+                                    child: Text(
+                                      'L',
+                                      style: TextStyle(color: Colors.white70, fontSize: 28),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildStatusBadge(subscriptionStatus),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        
+                        // QR Code Section
+                        Text(
+                          'Your Delivery QR Code',
+                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Show this to the delivery person to verify your delivery',
+                          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        
+                        // QR Code Card
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: colorScheme.outlineVariant),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: QrImageView(
+                                  data: qrCode,
+                                  version: QrVersions.auto,
+                                  size: 180,
+                                  backgroundColor: Colors.white,
+                                  eyeStyle: const QrEyeStyle(
+                                    eyeShape: QrEyeShape.square,
+                                    color: Color(0xFF1565C0),
+                                  ),
+                                  dataModuleStyle: const QrDataModuleStyle(
+                                    dataModuleShape: QrDataModuleShape.square,
+                                    color: Color(0xFF1565C0),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.tag, size: 16, color: colorScheme.primary),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      qrCode.length > 8 ? qrCode.substring(0, 8).toUpperCase() : qrCode,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 2,
+                                        color: colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        
+                        // How it works section
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.blue.shade100),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.lightbulb_outline, color: Colors.blue.shade700),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'How it works',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue.shade700),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildStep('1', 'Admin adds liters to your account after payment', Colors.blue.shade700),
+                              _buildStep('2', 'Delivery person scans your QR code', Colors.blue.shade700),
+                              _buildStep('3', 'Liters are deducted from your quota', Colors.blue.shade700),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
         ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
-          ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bgColor;
+    Color textColor;
+    String label;
+    IconData icon;
+
+    switch (status) {
+      case 'active':
+        bgColor = Colors.green.withOpacity(0.2);
+        textColor = Colors.greenAccent;
+        label = 'Active Subscription';
+        icon = Icons.check_circle;
+        break;
+      case 'pending':
+        bgColor = Colors.orange.withOpacity(0.2);
+        textColor = Colors.orangeAccent;
+        label = 'Pending Approval';
+        icon = Icons.hourglass_top;
+        break;
+      default:
+        bgColor = Colors.white.withOpacity(0.15);
+        textColor = Colors.white70;
+        label = 'No Active Subscription';
+        icon = Icons.info_outline;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: textColor),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  // Open Razorpay checkout
-  Future<void> _payWithRazorpay(double amount) async {
-    if (amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid amount')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    _pendingAmount = amount;
-    
-    try {
-      final user = SupabaseService.currentUser;
-      final profile = await SupabaseService.client
-          .from('profiles')
-          .select('full_name, phone')
-          .eq('id', user?.id ?? '')
-          .maybeSingle();
-      
-      Navigator.pop(context); // Close bottom sheet
-      
-      RazorpayService.openCheckout(
-        amount: amount,
-        orderId: 'WALLET${DateTime.now().millisecondsSinceEpoch}',
-        description: 'Wallet Recharge',
-        email: user?.email ?? 'customer@milkdelivery.com',
-        phone: profile?['phone']?.toString().replaceAll('+91', '') ?? '',
-        name: profile?['full_name'] ?? '',
-      );
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
-  }
-
-  // Show payment options bottom sheet
-  void _showPaymentOptions(double amount) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  Widget _buildStep(String number, String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(text, style: TextStyle(color: color, fontSize: 14)),
+            ),
+          ),
+        ],
       ),
-      builder: (context) => SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add ₹${amount.toStringAsFixed(0)} to Wallet',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Pay securely with Razorpay',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              
-              // All payment options via Razorpay
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildPaymentIcon('G', 'GPay'),
-                        _buildPaymentIcon('P', 'PhonePe'),
-                        _buildPaymentIcon('₿', 'Paytm'),
-                        _buildPaymentIcon('💳', 'Cards'),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _isLoading ? null : () => _payWithRazorpay(amount),
-                        icon: _isLoading 
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.payment),
-                        label: Text(_isLoading ? 'Processing...' : 'Pay ₹${amount.toStringAsFixed(0)}'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 12),
-              
-              // Security note
-              Row(
-                children: [
-                  Icon(Icons.verified_user, color: Colors.green.shade700, size: 18),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Secured by Razorpay • UPI, Cards, Net Banking',
-                      style: TextStyle(color: Colors.green.shade700, fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPaymentIcon(String icon, String label) {
-    return Column(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Text(icon, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 11)),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final walletAsync = ref.watch(walletProvider);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Wallet'),
-      ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // Balance Card
-              Card(
-                color: colorScheme.primaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.account_balance_wallet, color: colorScheme.onPrimaryContainer, size: 24),
-                          const SizedBox(width: 8),
-                          Text('Wallet Balance', style: TextStyle(color: colorScheme.onPrimaryContainer)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      walletAsync.when(
-                        data: (wallet) => Text(
-                          '₹${(wallet?.balance ?? 0.0).toStringAsFixed(2)}',
-                          style: theme.textTheme.displaySmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        loading: () => const CircularProgressIndicator(),
-                        error: (_, __) => Text('₹0.00', style: theme.textTheme.displaySmall),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Add Money section
-              Text('Add Money', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-
-              // Amount buttons
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [100, 200, 500, 1000].map((amount) {
-                  return ActionChip(
-                    avatar: const Icon(Icons.add, size: 18),
-                    label: Text('₹$amount'),
-                    onPressed: () => _showPaymentOptions(amount.toDouble()),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 20),
-
-              // Custom amount input
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Custom Amount', style: theme.textTheme.titleSmall),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _customAmountController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                prefixText: '₹ ',
-                                hintText: 'Enter amount',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: () {
-                              final amount = double.tryParse(_customAmountController.text) ?? 0;
-                              if (amount > 0) {
-                                _showPaymentOptions(amount);
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                'Add',
-                                style: TextStyle(
-                                  color: colorScheme.onPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Security info
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.verified_user, color: Colors.green.shade700),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Secure payments via Razorpay - UPI, Cards, Net Banking',
-                        style: TextStyle(color: Colors.green.shade700, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Transactions section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Recent Transactions', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  TextButton(onPressed: () {}, child: const Text('View All')),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Transaction list from database
-              Consumer(
-                builder: (context, ref, child) {
-                  final transactionsAsync = ref.watch(walletTransactionsProvider);
-                  
-                  return transactionsAsync.when(
-                    data: (transactions) {
-                      if (transactions.isEmpty) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(32),
-                            child: Column(
-                              children: [
-                                Icon(Icons.history, size: 48, color: Colors.grey),
-                                SizedBox(height: 16),
-                                Text('No recent transactions', style: TextStyle(color: Colors.grey)),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      
-                      return Column(
-                        children: transactions.map((tx) {
-                          final isCredit = tx.type == 'credit';
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: isCredit 
-                                    ? Colors.green.shade50 
-                                    : Colors.red.shade50,
-                                child: Icon(
-                                  isCredit ? Icons.add : Icons.remove,
-                                  color: isCredit ? Colors.green : Colors.red,
-                                ),
-                              ),
-                              title: Text(
-                                tx.description ?? (isCredit ? 'Money Added' : 'Deduction'),
-                                style: const TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                              subtitle: Text(
-                                tx.createdAt != null 
-                                    ? '${tx.createdAt!.day}/${tx.createdAt!.month}/${tx.createdAt!.year}'
-                                    : '',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                              ),
-                              trailing: Text(
-                                '${isCredit ? '+' : '-'}₹${tx.amount.toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  color: isCredit ? Colors.green : Colors.red,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Error: $e')),
-                  );
-                },
-              ),
-            ],
-          ),
     );
   }
 }

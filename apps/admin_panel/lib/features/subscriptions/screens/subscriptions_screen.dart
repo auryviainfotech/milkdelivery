@@ -90,6 +90,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
               spacing: 8,
               children: [
                 _buildFilterChip('All', 'all'),
+                _buildFilterChip('Pending', 'pending'),
                 _buildFilterChip('Active', 'active'),
                 _buildFilterChip('Paused', 'paused'),
                 _buildFilterChip('Expired', 'expired'),
@@ -146,7 +147,15 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                               ? const Icon(Icons.pause, color: Colors.orange)
                               : Text(customerName[0].toUpperCase()),
                         ),
-                        title: Text(customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Row(
+                          children: [
+                            Text(customerName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            if (sub['special_request'] != null) ...[
+                              const SizedBox(width: 8),
+                              const Icon(Icons.priority_high, size: 16, color: Colors.orange),
+                            ],
+                          ],
+                        ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -203,6 +212,9 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
   Widget _buildStatusChip(String status) {
     Color color;
     switch (status) {
+      case 'pending':
+        color = Colors.orange;
+        break;
       case 'active':
         color = AppTheme.successColor;
         break;
@@ -231,23 +243,96 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
 
 
   void _viewDetails(Map<String, dynamic> sub, Map<String, dynamic>? profile) {
+    final isPending = sub['status'] == 'pending';
+    final litersController = TextEditingController(text: '${sub['monthly_liters'] ?? 30}');
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(profile?['full_name'] ?? 'Subscription Details'),
         content: SizedBox(
           width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildInfoRow(Icons.phone, 'Phone', profile?['phone'] ?? '-'),
-              _buildInfoRow(Icons.location_on, 'Address', profile?['address'] ?? '-'),
-              _buildInfoRow(Icons.shopping_bag, 'Product', _getProductName(sub['product_id'])),
-              _buildInfoRow(Icons.repeat, 'Plan', sub['plan_type'] ?? '-'),
-              _buildInfoRow(Icons.numbers, 'Quantity', '${sub['quantity'] ?? 1}'),
-              _buildInfoRow(Icons.currency_rupee, 'Amount', '₹${sub['total_amount'] ?? 0}'),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildInfoRow(Icons.phone, 'Phone', profile?['phone'] ?? '-'),
+                _buildInfoRow(Icons.location_on, 'Address', sub['delivery_address'] ?? profile?['address'] ?? '-'),
+                _buildInfoRow(Icons.shopping_bag, 'Product', _getProductName(sub['product_id'])),
+                _buildInfoRow(Icons.water_drop, 'Monthly Liters', '${sub['monthly_liters'] ?? 30} L'),
+                _buildInfoRow(Icons.numbers, 'Quantity/Delivery', '${sub['quantity'] ?? 1}'),
+                _buildInfoRow(Icons.weekend, 'Skip Weekends', sub['skip_weekends'] == true ? 'Yes' : 'No'),
+                if (sub['special_request'] != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(children: [
+                          Icon(Icons.priority_high, size: 16, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Text('Special Request', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(sub['special_request'] ?? '', style: const TextStyle(fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                // Activation Section for Pending subscriptions
+                if (isPending) ...[
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.check_circle, color: Colors.green.shade700),
+                            const SizedBox(width: 8),
+                            Text('Activate Subscription', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: litersController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'Initial Liters to Add',
+                            hintText: 'Enter liters after payment collection',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            prefixIcon: const Icon(Icons.water_drop),
+                            suffixText: 'Liters',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _activateSubscription(sub['id'], sub['user_id'], litersController.text),
+                            icon: const Icon(Icons.check),
+                            label: const Text('Activate & Add Liters'),
+                            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -258,6 +343,50 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
         ],
       ),
     );
+  }
+  
+  Future<void> _activateSubscription(String subscriptionId, String userId, String litersText) async {
+    final liters = double.tryParse(litersText) ?? 0;
+    if (liters <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter valid liters amount')),
+      );
+      return;
+    }
+    
+    try {
+      // Update subscription status to active
+      await SupabaseService.client
+          .from('subscriptions')
+          .update({'status': 'active'})
+          .eq('id', subscriptionId);
+      
+      // Add liters to customer profile
+      await SupabaseService.client
+          .from('profiles')
+          .update({
+            'liters_remaining': liters,
+            'subscription_status': 'active',
+          })
+          .eq('id', userId);
+      
+      if (mounted) {
+        Navigator.pop(context);
+        ref.invalidate(subscriptionsProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Subscription activated! Added $liters liters to customer.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {

@@ -14,30 +14,31 @@ class OrdersScreen extends ConsumerWidget {
     final colorScheme = theme.colorScheme;
     final ordersAsync = ref.watch(ordersProvider);
 
-    return Column(
-      children: [
-        // Custom App Bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: colorScheme.surface,
-            border: Border(
-              bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
+    return SafeArea(
+      child: Column(
+        children: [
+          // Custom App Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Orders',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Orders',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: ordersAsync.when(
             data: (orders) {
@@ -148,6 +149,7 @@ class OrdersScreen extends ConsumerWidget {
           ),
         ),
       ],
+      ),
     );
   }
 

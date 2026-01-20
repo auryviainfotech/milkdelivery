@@ -27,7 +27,13 @@ mixin _$UserModel {
   String? get address => throw _privateConstructorUsedError;
   double? get latitude => throw _privateConstructorUsedError;
   double? get longitude => throw _privateConstructorUsedError;
+  @JsonKey(name: 'qr_code')
+  String? get qrCode => throw _privateConstructorUsedError;
   UserRole get role => throw _privateConstructorUsedError;
+  @JsonKey(name: 'liters_remaining')
+  double get litersRemaining => throw _privateConstructorUsedError;
+  @JsonKey(name: 'subscription_status')
+  String get subscriptionStatus => throw _privateConstructorUsedError;
   @JsonKey(name: 'created_at')
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
@@ -53,7 +59,10 @@ abstract class $UserModelCopyWith<$Res> {
       String? address,
       double? latitude,
       double? longitude,
+      @JsonKey(name: 'qr_code') String? qrCode,
       UserRole role,
+      @JsonKey(name: 'liters_remaining') double litersRemaining,
+      @JsonKey(name: 'subscription_status') String subscriptionStatus,
       @JsonKey(name: 'created_at') DateTime? createdAt});
 }
 
@@ -78,7 +87,10 @@ class _$UserModelCopyWithImpl<$Res, $Val extends UserModel>
     Object? address = freezed,
     Object? latitude = freezed,
     Object? longitude = freezed,
+    Object? qrCode = freezed,
     Object? role = null,
+    Object? litersRemaining = null,
+    Object? subscriptionStatus = null,
     Object? createdAt = freezed,
   }) {
     return _then(_value.copyWith(
@@ -106,10 +118,22 @@ class _$UserModelCopyWithImpl<$Res, $Val extends UserModel>
           ? _value.longitude
           : longitude // ignore: cast_nullable_to_non_nullable
               as double?,
+      qrCode: freezed == qrCode
+          ? _value.qrCode
+          : qrCode // ignore: cast_nullable_to_non_nullable
+              as String?,
       role: null == role
           ? _value.role
           : role // ignore: cast_nullable_to_non_nullable
               as UserRole,
+      litersRemaining: null == litersRemaining
+          ? _value.litersRemaining
+          : litersRemaining // ignore: cast_nullable_to_non_nullable
+              as double,
+      subscriptionStatus: null == subscriptionStatus
+          ? _value.subscriptionStatus
+          : subscriptionStatus // ignore: cast_nullable_to_non_nullable
+              as String,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -133,7 +157,10 @@ abstract class _$$UserModelImplCopyWith<$Res>
       String? address,
       double? latitude,
       double? longitude,
+      @JsonKey(name: 'qr_code') String? qrCode,
       UserRole role,
+      @JsonKey(name: 'liters_remaining') double litersRemaining,
+      @JsonKey(name: 'subscription_status') String subscriptionStatus,
       @JsonKey(name: 'created_at') DateTime? createdAt});
 }
 
@@ -156,7 +183,10 @@ class __$$UserModelImplCopyWithImpl<$Res>
     Object? address = freezed,
     Object? latitude = freezed,
     Object? longitude = freezed,
+    Object? qrCode = freezed,
     Object? role = null,
+    Object? litersRemaining = null,
+    Object? subscriptionStatus = null,
     Object? createdAt = freezed,
   }) {
     return _then(_$UserModelImpl(
@@ -184,10 +214,22 @@ class __$$UserModelImplCopyWithImpl<$Res>
           ? _value.longitude
           : longitude // ignore: cast_nullable_to_non_nullable
               as double?,
+      qrCode: freezed == qrCode
+          ? _value.qrCode
+          : qrCode // ignore: cast_nullable_to_non_nullable
+              as String?,
       role: null == role
           ? _value.role
           : role // ignore: cast_nullable_to_non_nullable
               as UserRole,
+      litersRemaining: null == litersRemaining
+          ? _value.litersRemaining
+          : litersRemaining // ignore: cast_nullable_to_non_nullable
+              as double,
+      subscriptionStatus: null == subscriptionStatus
+          ? _value.subscriptionStatus
+          : subscriptionStatus // ignore: cast_nullable_to_non_nullable
+              as String,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -206,7 +248,11 @@ class _$UserModelImpl implements _UserModel {
       this.address,
       this.latitude,
       this.longitude,
+      @JsonKey(name: 'qr_code') this.qrCode,
       this.role = UserRole.customer,
+      @JsonKey(name: 'liters_remaining') this.litersRemaining = 0.0,
+      @JsonKey(name: 'subscription_status')
+      this.subscriptionStatus = 'inactive',
       @JsonKey(name: 'created_at') this.createdAt});
 
   factory _$UserModelImpl.fromJson(Map<String, dynamic> json) =>
@@ -226,15 +272,24 @@ class _$UserModelImpl implements _UserModel {
   @override
   final double? longitude;
   @override
+  @JsonKey(name: 'qr_code')
+  final String? qrCode;
+  @override
   @JsonKey()
   final UserRole role;
+  @override
+  @JsonKey(name: 'liters_remaining')
+  final double litersRemaining;
+  @override
+  @JsonKey(name: 'subscription_status')
+  final String subscriptionStatus;
   @override
   @JsonKey(name: 'created_at')
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'UserModel(id: $id, phone: $phone, fullName: $fullName, address: $address, latitude: $latitude, longitude: $longitude, role: $role, createdAt: $createdAt)';
+    return 'UserModel(id: $id, phone: $phone, fullName: $fullName, address: $address, latitude: $latitude, longitude: $longitude, qrCode: $qrCode, role: $role, litersRemaining: $litersRemaining, subscriptionStatus: $subscriptionStatus, createdAt: $createdAt)';
   }
 
   @override
@@ -251,15 +306,31 @@ class _$UserModelImpl implements _UserModel {
                 other.latitude == latitude) &&
             (identical(other.longitude, longitude) ||
                 other.longitude == longitude) &&
+            (identical(other.qrCode, qrCode) || other.qrCode == qrCode) &&
             (identical(other.role, role) || other.role == role) &&
+            (identical(other.litersRemaining, litersRemaining) ||
+                other.litersRemaining == litersRemaining) &&
+            (identical(other.subscriptionStatus, subscriptionStatus) ||
+                other.subscriptionStatus == subscriptionStatus) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, phone, fullName, address,
-      latitude, longitude, role, createdAt);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      phone,
+      fullName,
+      address,
+      latitude,
+      longitude,
+      qrCode,
+      role,
+      litersRemaining,
+      subscriptionStatus,
+      createdAt);
 
   /// Create a copy of UserModel
   /// with the given fields replaced by the non-null parameter values.
@@ -285,7 +356,10 @@ abstract class _UserModel implements UserModel {
           final String? address,
           final double? latitude,
           final double? longitude,
+          @JsonKey(name: 'qr_code') final String? qrCode,
           final UserRole role,
+          @JsonKey(name: 'liters_remaining') final double litersRemaining,
+          @JsonKey(name: 'subscription_status') final String subscriptionStatus,
           @JsonKey(name: 'created_at') final DateTime? createdAt}) =
       _$UserModelImpl;
 
@@ -306,7 +380,16 @@ abstract class _UserModel implements UserModel {
   @override
   double? get longitude;
   @override
+  @JsonKey(name: 'qr_code')
+  String? get qrCode;
+  @override
   UserRole get role;
+  @override
+  @JsonKey(name: 'liters_remaining')
+  double get litersRemaining;
+  @override
+  @JsonKey(name: 'subscription_status')
+  String get subscriptionStatus;
   @override
   @JsonKey(name: 'created_at')
   DateTime? get createdAt;

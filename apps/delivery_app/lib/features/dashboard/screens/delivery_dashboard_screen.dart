@@ -516,7 +516,9 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
             const SizedBox(height: 8),
             // Badges Row - only show time slot for pending, hide for delivered
             if (!isDelivered)
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   // Time Slot Badge
                   Container(
@@ -547,7 +549,54 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  // Liters Badge (Subscription orders)
+                  if (order?['order_type'] != 'one_time')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.water_drop, size: 12, color: Colors.blue.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${order?['quantity'] ?? 1}L',
+                            style: TextStyle(
+                              color: Colors.blue.shade700,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // COD Badge (Shop orders)
+                  if (order?['payment_method'] == 'cod' || order?['order_type'] == 'one_time')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.payments_outlined, size: 12, color: Colors.green.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Collect ₹${(order?['total_amount'] ?? 0).toStringAsFixed(0)}',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   // Status Badge
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

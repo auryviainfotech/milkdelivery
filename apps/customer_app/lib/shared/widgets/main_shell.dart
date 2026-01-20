@@ -1,42 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../providers/auth_providers.dart';
 
 /// Main shell with bottom navigation bar
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCountAsync = ref.watch(unreadNotificationCountProvider);
+    final unreadCount = unreadCountAsync.valueOrNull ?? 0;
+
     return Scaffold(
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _calculateSelectedIndex(context),
         onDestinationSelected: (index) => _onItemTapped(index, context),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
             label: 'Orders',
           ),
           NavigationDestination(
-            icon: Badge(
-              label: Text('3'),
-              child: Icon(Icons.notifications_outlined),
-            ),
-            selectedIcon: Badge(
-              label: Text('3'),
-              child: Icon(Icons.notifications),
-            ),
+            icon: unreadCount > 0
+                ? Badge(
+                    label: Text('$unreadCount'),
+                    child: const Icon(Icons.notifications_outlined),
+                  )
+                : const Icon(Icons.notifications_outlined),
+            selectedIcon: unreadCount > 0
+                ? Badge(
+                    label: Text('$unreadCount'),
+                    child: const Icon(Icons.notifications),
+                  )
+                : const Icon(Icons.notifications),
             label: 'Alerts',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Profile',
