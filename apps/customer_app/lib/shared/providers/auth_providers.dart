@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:milk_core/milk_core.dart';
 
@@ -56,9 +57,20 @@ final ordersProvider = FutureProvider<List<OrderModel>>((ref) async {
       .eq('user_id', user.id)
       .order('delivery_date', ascending: false);
   
-  return (response as List)
-      .map((json) => OrderModel.fromJson(json))
-      .toList();
+  try {
+    return (response as List).map((json) {
+      try {
+        return OrderModel.fromJson(json);
+      } catch (e) {
+        debugPrint('Error parsing order JSON: $json');
+        debugPrint('Error details: $e');
+        rethrow;
+      }
+    }).toList();
+  } catch (e) {
+    debugPrint('Fatal error mapping orders: $e');
+    return [];
+  }
 });
 
 /// Provider for user's active subscriptions

@@ -1,0 +1,22 @@
+# List all RLS policies
+$headers = @{ 
+    "Authorization" = "Bearer sbp_489fd03f475007933447670bf67e17246db236fe"
+    "Content-Type" = "application/json" 
+}
+
+$projectRef = "qxwjtbhyywwpcehwhegz"
+$apiUrl = "https://api.supabase.com/v1/projects/$projectRef/database/query"
+
+function Invoke-SQL {
+    param($sql)
+    $body = @{ query = $sql } | ConvertTo-Json -Depth 10
+    try {
+        $result = Invoke-RestMethod -Uri $apiUrl -Method POST -Headers $headers -Body $body
+        return $result
+    } catch {
+        Write-Host "ERROR: $_" -ForegroundColor Red
+        return $null
+    }
+}
+
+Invoke-SQL "select policyname, tablename, cmd from pg_policies;" | Format-Table -AutoSize

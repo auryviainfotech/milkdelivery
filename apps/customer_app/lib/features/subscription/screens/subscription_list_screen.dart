@@ -247,9 +247,13 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text('Product', style: TextStyle(color: colorScheme.onPrimaryContainer)),
-                                  Text(
-                                    _products.firstWhere((p) => p['id'] == _selectedProductId)['name'],
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
+                                  Flexible(
+                                    child: Text(
+                                      _products.firstWhere((p) => p['id'] == _selectedProductId)['name'],
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onPrimaryContainer),
+                                      textAlign: TextAlign.end,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -388,26 +392,42 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
       final product = _products.firstWhere((p) => p['id'] == _selectedProductId);
       
       // Create subscription request (status = pending)
+      final startDate = DateTime.now().add(const Duration(days: 1));
+      final endDate = startDate.add(const Duration(days: 30));
+      
       await SupabaseService.client.from('subscriptions').insert({
         'user_id': user.id,
         'product_id': _selectedProductId,
         'quantity': 1, // Per delivery
         'monthly_liters': _monthlyLiters,
-        'plan': 'monthly',
+        'plan_type': 'monthly',
         'status': 'pending', // Admin will activate
         'skip_weekends': _skipWeekends,
         'delivery_address': address,
-        'latitude': latitude,
-        'longitude': longitude,
-        'time_slot': 'morning',
-        'start_date': DateTime.now().add(const Duration(days: 1)).toIso8601String().split('T')[0],
+        'delivery_slot': 'morning',
+        'start_date': startDate.toIso8601String().split('T')[0],
+        'end_date': endDate.toIso8601String().split('T')[0],
       });
 
-      // Update profile address if set
-      await SupabaseService.client.from('profiles').update({
+      // Update profile address and status (if not already active)
+      final profileResponse = await SupabaseService.client
+          .from('profiles')
+          .select('subscription_status')
+          .eq('id', user.id)
+          .maybeSingle();
+      
+      final currentStatus = profileResponse?['subscription_status'] as String? ?? 'inactive';
+      
+      final updateData = <String, dynamic>{
         'address': address,
-        'subscription_status': 'pending',
-      }).eq('id', user.id);
+      };
+
+      // Only set to pending if not currently active
+      if (currentStatus != 'active') {
+        updateData['subscription_status'] = 'pending';
+      }
+
+      await SupabaseService.client.from('profiles').update(updateData).eq('id', user.id);
 
       if (mounted) {
         setState(() => _isProcessing = false);

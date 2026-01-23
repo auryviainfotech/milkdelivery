@@ -7,7 +7,6 @@ import '../features/customers/screens/customers_screen.dart';
 import '../features/delivery_persons/screens/delivery_persons_screen.dart';
 import '../features/subscriptions/screens/subscriptions_screen.dart';
 import '../features/deliveries/screens/deliveries_screen.dart';
-import '../features/wallets/screens/wallets_screen.dart';
 import '../features/reports/screens/reports_screen.dart';
 import '../features/assignments/screens/assignments_screen.dart';
 import '../shared/widgets/admin_shell.dart';
@@ -69,11 +68,6 @@ final adminRouter = GoRouter(
           path: '/assignments',
           name: 'assignments',
           builder: (context, state) => const AssignmentsScreen(),
-        ),
-        GoRoute(
-          path: '/wallets',
-          name: 'wallets',
-          builder: (context, state) => const WalletsScreen(),
         ),
         GoRoute(
           path: '/reports',

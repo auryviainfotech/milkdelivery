@@ -35,34 +35,51 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Login by checking profiles table directly
-      final phone = '+91${_phoneController.text.trim()}';
+      final rawPhone = _phoneController.text.trim();
+      final phone = '+91$rawPhone';
       final password = _passwordController.text;
+      final authEmail = 'delivery_$rawPhone@milkdelivery.local';
       
+      debugPrint('=== LOGIN ATTEMPT ===');
+      debugPrint('Phone: $phone');
+      
+      final authResponse = await SupabaseService.client.auth.signInWithPassword(
+        email: authEmail,
+        password: password,
+      );
+
+      final user = authResponse.user;
+      if (user == null) {
+        throw Exception('Login failed');
+      }
+
       final response = await SupabaseService.client
           .from('profiles')
           .select()
-          .eq('phone', phone)
-          .or('role.eq.delivery,role.eq.admin') // Allow admin to login too
+          .eq('id', user.id)
           .maybeSingle();
 
+      debugPrint('Response: $response');
+
       if (response == null) {
-        throw Exception('Phone number not registered');
+        await SupabaseService.client.auth.signOut();
+        throw Exception('Delivery account not linked');
+      }
+
+      final role = response['role'];
+      if (role != 'delivery' && role != 'admin') {
+        await SupabaseService.client.auth.signOut();
+        throw Exception('Access denied');
       }
       
-      // Check password (stored in address field)
-      // BYPASS for admin or if address doesn't match a password pattern
-      final isDelivery = response['role'] == 'delivery';
-      if (isDelivery && response['address'] != password) {
-        throw Exception('Invalid password');
-      }
-      // For admin, we allow any password for now in this dev/test mode
-      // or we could check real auth, but UI is phone-only.
+      debugPrint('Found profile: ${response['full_name']}, ID: ${response['id']}');
 
       // Store the profile ID for later use
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('delivery_person_id', response['id']);
+      await prefs.setString('delivery_person_id', user.id);
       await prefs.setString('delivery_person_name', response['full_name'] ?? 'Delivery Person');
+      
+      debugPrint('Stored delivery_person_id: ${response['id']}');
 
       // Force refresh of providers to load new user data
       ref.invalidate(deliveryPersonIdProvider);

@@ -11,26 +11,7 @@ class RouteListScreen extends ConsumerWidget {
   const RouteListScreen({super.key});
 
   // Fallback dummy data if Supabase fails
-  static final List<Map<String, dynamic>> _fallbackDeliveries = [
-    {
-      'id': '1',
-      'name': 'Rahul Sharma',
-      'phone': '+919876543210',
-      'address': 'House 45, Sector 45, Gurgaon',
-      'product': 'Full Cream Milk 500ml × 2',
-      'plan': 'daily',
-      'status': 'pending',
-    },
-    {
-      'id': '2',
-      'name': 'Priya Singh',
-      'phone': '+919876543211',
-      'address': 'Flat 302, DLF Phase 2, Gurgaon',
-      'product': 'Toned Milk 500ml × 1',
-      'plan': 'weekly',
-      'status': 'pending',
-    },
-  ];
+
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -45,11 +26,26 @@ class RouteListScreen extends ConsumerWidget {
           onPressed: () => context.pop(),
           icon: const Icon(Icons.arrow_back),
         ),
-        title: const Text("Today's Deliveries"),
+        title: const Text('Deliveries'),
       ),
       body: deliveriesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => _buildDeliveryList(context, _fallbackDeliveries),
+        error: (e, __) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+              const SizedBox(height: 16),
+              Text('Error loading deliveries', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => ref.refresh(todayDeliveriesProvider),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
         data: (deliveries) {
           if (deliveries.isEmpty) {
             return Center(
@@ -59,7 +55,7 @@ class RouteListScreen extends ConsumerWidget {
                   Icon(Icons.local_shipping_outlined, size: 64, color: colorScheme.onSurfaceVariant),
                   const SizedBox(height: 16),
                   Text(
-                    'No deliveries for today',
+                    'No upcoming deliveries',
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),

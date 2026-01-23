@@ -1,0 +1,23 @@
+﻿[
+    {
+        "id":  "bcef3e1c-3893-4ec8-a103-7de6dffbe78e",
+        "full_name":  "bilal",
+        "phone":  "+917993619422",
+        "role":  "delivery",
+        "password":  "bilal123"
+    },
+    {
+        "id":  "afb19c4f-e23f-4a0e-8fb4-eeaf8abacc3e",
+        "full_name":  "Test Customer (Admin)",
+        "phone":  "+919999999999",
+        "role":  "admin",
+        "password":  "Flat 101, Test Appt, Hyderabad 500001"
+    },
+    {
+        "id":  "27a6158c-8ecf-44fc-9db5-9776565c481e",
+        "full_name":  "syed",
+        "phone":  "+919849872984",
+        "role":  "delivery",
+        "password":  "syed123"
+    }
+]

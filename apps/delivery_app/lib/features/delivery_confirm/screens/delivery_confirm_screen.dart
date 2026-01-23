@@ -4,35 +4,38 @@ import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import '../../dashboard/screens/delivery_dashboard_screen.dart';
 
-/// Provider to fetch order details for delivery confirmation
-final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, orderId) async {
-  print('DEBUG deliveryDetailProvider: Looking for order with id: $orderId');
+/// Provider to fetch delivery details using Delivery ID
+final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, deliveryId) async {
   try {
-    // Fetch order with customer profile and subscription details
+    // Fetch delivery with order, customer profile, and subscription details
+    // Matches the structure used in dashboard
     final response = await SupabaseService.client
-        .from('orders')
-        .select('*, profiles!orders_user_id_fkey(id, full_name, address, phone), subscriptions!orders_subscription_id_fkey(delivery_slot)')
-        .eq('id', orderId)
+        .from('deliveries')
+        .select('''
+          *,
+          orders (
+            id,
+            user_id,
+            subscription_id,
+            status,
+            total_amount,
+            payment_method,
+            order_type,
+            subscriptions (
+              delivery_slot,
+              quantity,
+              products (name, unit, image_url)
+            ),
+            profiles (full_name, phone, address)
+          )
+        ''')
+        .eq('id', deliveryId)
         .maybeSingle();
     
-    if (response == null) {
-      print('DEBUG deliveryDetailProvider: No order found for id: $orderId');
-      return null;
-    }
-    
-    print('DEBUG deliveryDetailProvider: Found order: ${response['id']}');
-    
-    // Transform to expected format for compatibility
-    return {
-      'id': response['id'],
-      'order_id': response['id'],
-      'status': response['status'] ?? 'pending',
-      'delivered_at': response['delivered_at'],
-      'delivery_slot': response['subscriptions']?['delivery_slot'] ?? 'morning',
-      'orders': response, // Include full order data
-    };
-  } catch (e) {
-    print('Error fetching order for delivery: $e');
+    return response;
+  } catch (e, stack) {
+    debugPrint('Error fetching delivery details: $e');
+    debugPrint('Stack: $stack');
     return null;
   }
 });
@@ -134,27 +137,18 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Text('🥛', style: TextStyle(fontSize: 24)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Milk Delivery',
-                                    style: theme.textTheme.bodyLarge?.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Scheduled: ${delivery['scheduled_date'] ?? 'Today'}',
-                                    style: TextStyle(
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                        
+                        // Product Info
+                        _buildProductInfo(colorScheme, order),
+                        
+                        const SizedBox(height: 8),
+                        Text(
+                          'Scheduled: ${delivery['scheduled_date'] ?? 'Today'}',
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
                                 ],
                               ),
                             ),
@@ -284,13 +278,13 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                     await SupabaseService.client
                         .from('orders')
                         .update({'status': 'failed'})
-                        .eq('id', delivery['id']);
+                        .eq('id', delivery['order_id']);
                     
                     // Update deliveries table with issue status
                     await SupabaseService.client
                         .from('deliveries')
                         .update({'status': 'issue'})
-                        .eq('order_id', delivery['id']);
+                        .eq('id', delivery['id']);
                   } catch (e) {
                     print('Error reporting issue: $e');
                   }
@@ -349,7 +343,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                 await SupabaseService.client
                     .from('orders')
                     .update({'status': 'delivered'})
-                    .eq('id', delivery['id']);
+                    .eq('id', delivery['order_id']);
                 
                 // Update deliveries table (has delivered_at column)
                 await SupabaseService.client
@@ -358,14 +352,28 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                       'status': 'delivered',
                       'delivered_at': DateTime.now().toIso8601String(),
                     })
-                    .eq('order_id', delivery['id']);
+                    .eq('id', delivery['id']);
                 
                 // Invalidate providers to refresh dashboard data
+                // Cast to String to ensure type safety
+                final String orderId = delivery['order_id'] as String;
                 ref.invalidate(todayDeliveriesProvider);
                 ref.invalidate(deliveryDetailProvider(orderId));
                 
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+                
+                if (context.mounted) {
+                  context.go('/dashboard');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✓ Delivery marked as complete!'),
+                      backgroundColor: AppTheme.successColor,
+                    ),
+                  );
+                }
               } catch (e) {
-                print('Error updating order: $e');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -374,17 +382,6 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                     ),
                   );
                 }
-                return;
-              }
-              Navigator.pop(dialogContext);
-              if (context.mounted) {
-                context.go('/dashboard');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('✓ Delivery marked as complete!'),
-                    backgroundColor: AppTheme.successColor,
-                  ),
-                );
               }
             },
             child: const Text('Confirm'),
@@ -393,4 +390,5 @@ class DeliveryConfirmScreen extends ConsumerWidget {
       ),
     );
   }
+
 }

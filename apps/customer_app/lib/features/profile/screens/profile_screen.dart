@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -41,32 +43,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               if (nameController.text.trim().isEmpty) return;
               
               final user = SupabaseService.currentUser;
-              print('DEBUG: user = $user, profile = $profile');
               if (user == null || profile == null) {
-                print('DEBUG: user or profile is null, returning');
                 return;
               }
               
               try {
-                final updated = UserModel(
-                  id: profile.id,
-                  phone: profile.phone,
-                  fullName: nameController.text.trim(),
-                  address: profile.address,
-                  role: profile.role,
-                  createdAt: profile.createdAt,
-                );
-                print('DEBUG: Saving profile: ${updated.toJson()}');
+                final updated = profile.copyWith(fullName: nameController.text.trim());
                 await UserRepository.saveProfile(updated);
-                print('DEBUG: Save completed successfully');
                 ref.invalidate(userProfileProvider);
                 if (mounted) Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Profile updated!')),
                 );
               } catch (e, stackTrace) {
-                print('DEBUG: Save error: $e');
-                print('DEBUG: Stack trace: $stackTrace');
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 5)),
                 );
@@ -81,57 +70,126 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _showEditAddressDialog(UserModel? profile) {
     final addressController = TextEditingController(text: profile?.address ?? '');
+    bool isLoadingLocation = false;
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Delivery Address'),
-        content: TextField(
-          controller: addressController,
-          decoration: const InputDecoration(
-            labelText: 'Full Address',
-            prefixIcon: Icon(Icons.location_on_outlined),
-            hintText: 'e.g. Flat 101, Tower A, Palm Heights',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Delivery Address'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Address',
+                  prefixIcon: Icon(Icons.location_on_outlined),
+                  hintText: 'e.g. Flat 101, Tower A, Palm Heights',
+                ),
+                maxLines: 3,
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              // GPS Location Button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isLoadingLocation ? null : () async {
+                    setDialogState(() => isLoadingLocation = true);
+                    try {
+                      // Check permission
+                      LocationPermission permission = await Geolocator.checkPermission();
+                      if (permission == LocationPermission.denied) {
+                        permission = await Geolocator.requestPermission();
+                        if (permission == LocationPermission.denied) {
+                          throw Exception('Location permission denied');
+                        }
+                      }
+                      
+                      if (permission == LocationPermission.deniedForever) {
+                        throw Exception('Location permission permanently denied. Enable in settings.');
+                      }
+                      
+                      // Get current position
+                      final position = await Geolocator.getCurrentPosition(
+                        desiredAccuracy: LocationAccuracy.high,
+                      );
+                      
+                      // Convert to address
+                      final placemarks = await placemarkFromCoordinates(
+                        position.latitude,
+                        position.longitude,
+                      );
+                      
+                      if (placemarks.isNotEmpty) {
+                        final place = placemarks.first;
+                        final address = [
+                          place.street,
+                          place.subLocality,
+                          place.locality,
+                          place.postalCode,
+                          place.administrativeArea,
+                        ].where((e) => e != null && e.isNotEmpty).join(', ');
+                        
+                        addressController.text = address;
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Location error: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    } finally {
+                      setDialogState(() => isLoadingLocation = false);
+                    }
+                  },
+                  icon: isLoadingLocation 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.my_location),
+                  label: Text(isLoadingLocation ? 'Getting Location...' : 'Use My Location'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'GPS location helps delivery person find you easily',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            ),
           ),
-          maxLines: 3,
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (addressController.text.trim().isEmpty) return;
+                
+                final user = SupabaseService.currentUser;
+                if (user == null || profile == null) return;
+                
+                try {
+                  final updated = profile.copyWith(address: addressController.text.trim());
+                  await UserRepository.saveProfile(updated);
+                  ref.invalidate(userProfileProvider);
+                  if (mounted) Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Address updated!')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (addressController.text.trim().isEmpty) return;
-              
-              final user = SupabaseService.currentUser;
-              if (user == null || profile == null) return;
-              
-              try {
-                final updated = UserModel(
-                  id: profile.id,
-                  phone: profile.phone,
-                  fullName: profile.fullName,
-                  address: addressController.text.trim(),
-                  role: profile.role,
-                  createdAt: profile.createdAt,
-                );
-                await UserRepository.saveProfile(updated);
-                ref.invalidate(userProfileProvider);
-                if (mounted) Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Address updated!')),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
@@ -528,11 +586,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     size: 72,
                     backgroundColor: Colors.white,
                     eyeStyle: QrEyeStyle(
-                      eyeShape: QrEyeShape.roundedRect,
+                      eyeShape: QrEyeShape.square,
                       color: colorScheme.primary,
                     ),
                     dataModuleStyle: const QrDataModuleStyle(
-                      dataModuleShape: QrDataModuleShape.roundedRect,
+                      dataModuleShape: QrDataModuleShape.square,
                       color: Colors.black87,
                     ),
                   ),

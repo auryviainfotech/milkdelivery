@@ -9,24 +9,30 @@ part of 'order_model.dart';
 _$OrderModelImpl _$$OrderModelImplFromJson(Map<String, dynamic> json) =>
     _$OrderModelImpl(
       id: json['id'] as String,
-      userId: json['userId'] as String,
-      subscriptionId: json['subscriptionId'] as String?,
-      deliveryDate: DateTime.parse(json['deliveryDate'] as String),
+      userId: json['user_id'] as String,
+      subscriptionId: json['subscription_id'] as String?,
+      deliveryDate: DateTime.parse(json['delivery_date'] as String),
       status: $enumDecodeNullable(_$OrderStatusEnumMap, json['status']) ??
           OrderStatus.pending,
-      createdAt: json['createdAt'] == null
+      createdAt: json['created_at'] == null
           ? null
-          : DateTime.parse(json['createdAt'] as String),
+          : DateTime.parse(json['created_at'] as String),
+      paymentMethod: json['payment_method'] as String?,
+      totalAmount: (json['total_amount'] as num?)?.toDouble(),
+      orderType: json['order_type'] as String?,
     );
 
 Map<String, dynamic> _$$OrderModelImplToJson(_$OrderModelImpl instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'userId': instance.userId,
-      'subscriptionId': instance.subscriptionId,
-      'deliveryDate': instance.deliveryDate.toIso8601String(),
+      'user_id': instance.userId,
+      'subscription_id': instance.subscriptionId,
+      'delivery_date': instance.deliveryDate.toIso8601String(),
       'status': _$OrderStatusEnumMap[instance.status]!,
-      'createdAt': instance.createdAt?.toIso8601String(),
+      'created_at': instance.createdAt?.toIso8601String(),
+      'payment_method': instance.paymentMethod,
+      'total_amount': instance.totalAmount,
+      'order_type': instance.orderType,
     };
 
 const _$OrderStatusEnumMap = {
@@ -39,8 +45,8 @@ const _$OrderStatusEnumMap = {
 _$OrderItemImpl _$$OrderItemImplFromJson(Map<String, dynamic> json) =>
     _$OrderItemImpl(
       id: json['id'] as String,
-      orderId: json['orderId'] as String,
-      productId: json['productId'] as String,
+      orderId: json['order_id'] as String,
+      productId: json['product_id'] as String,
       quantity: (json['quantity'] as num).toInt(),
       price: (json['price'] as num).toDouble(),
     );
@@ -48,8 +54,8 @@ _$OrderItemImpl _$$OrderItemImplFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$$OrderItemImplToJson(_$OrderItemImpl instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'orderId': instance.orderId,
-      'productId': instance.productId,
+      'order_id': instance.orderId,
+      'product_id': instance.productId,
       'quantity': instance.quantity,
       'price': instance.price,
     };
@@ -57,32 +63,32 @@ Map<String, dynamic> _$$OrderItemImplToJson(_$OrderItemImpl instance) =>
 _$DeliveryModelImpl _$$DeliveryModelImplFromJson(Map<String, dynamic> json) =>
     _$DeliveryModelImpl(
       id: json['id'] as String,
-      orderId: json['orderId'] as String,
-      deliveryPersonId: json['deliveryPersonId'] as String,
-      scheduledDate: DateTime.parse(json['scheduledDate'] as String),
-      deliveredAt: json['deliveredAt'] == null
+      orderId: json['order_id'] as String,
+      deliveryPersonId: json['delivery_person_id'] as String,
+      scheduledDate: DateTime.parse(json['scheduled_date'] as String),
+      deliveredAt: json['delivered_at'] == null
           ? null
-          : DateTime.parse(json['deliveredAt'] as String),
-      qrScanned: json['qrScanned'] as bool? ?? false,
+          : DateTime.parse(json['delivered_at'] as String),
+      qrScanned: json['qr_scanned'] as bool? ?? false,
       status: $enumDecodeNullable(_$DeliveryStatusEnumMap, json['status']) ??
           DeliveryStatus.pending,
-      issueNotes: json['issueNotes'] as String?,
-      createdAt: json['createdAt'] == null
+      issueNotes: json['issue_notes'] as String?,
+      createdAt: json['created_at'] == null
           ? null
-          : DateTime.parse(json['createdAt'] as String),
+          : DateTime.parse(json['created_at'] as String),
     );
 
 Map<String, dynamic> _$$DeliveryModelImplToJson(_$DeliveryModelImpl instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'orderId': instance.orderId,
-      'deliveryPersonId': instance.deliveryPersonId,
-      'scheduledDate': instance.scheduledDate.toIso8601String(),
-      'deliveredAt': instance.deliveredAt?.toIso8601String(),
-      'qrScanned': instance.qrScanned,
+      'order_id': instance.orderId,
+      'delivery_person_id': instance.deliveryPersonId,
+      'scheduled_date': instance.scheduledDate.toIso8601String(),
+      'delivered_at': instance.deliveredAt?.toIso8601String(),
+      'qr_scanned': instance.qrScanned,
       'status': _$DeliveryStatusEnumMap[instance.status]!,
-      'issueNotes': instance.issueNotes,
-      'createdAt': instance.createdAt?.toIso8601String(),
+      'issue_notes': instance.issueNotes,
+      'created_at': instance.createdAt?.toIso8601String(),
     };
 
 const _$DeliveryStatusEnumMap = {

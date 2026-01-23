@@ -14,10 +14,11 @@ class OrderGenerationService {
     int ordersCreated = 0;
     int deliveriesAssigned = 0;
     int unassigned = 0;
+    int failed = 0;
     
     final targetDateStr = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
     
-    // 1. Get active subscriptions with profile info (no products join - fetch separately)
+    // 1. Get active subscriptions with profile info
     final subscriptions = await client
         .from('subscriptions')
         .select('*, profiles:user_id(id, full_name, address, latitude, longitude, assigned_delivery_person_id)')
@@ -25,15 +26,15 @@ class OrderGenerationService {
         .gte('end_date', targetDateStr);
     
     if (subscriptions.isEmpty) {
-      return {'orders_created': 0, 'deliveries_assigned': 0, 'unassigned': 0};
+      return {'orders_created': 0, 'deliveries_assigned': 0, 'unassigned': 0, 'failed': 0};
     }
     
-    // 2. Fetch all products to lookup prices
+    // 2. Fetch all products to lookup prices and validate existence
     final productsResponse = await client
         .from('products')
         .select('id, price');
     
-    // Create a map for quick product price lookup
+    // Create a map for quick product price lookup and validation
     final productPrices = <String, double>{};
     for (final product in productsResponse) {
       final productId = product['id']?.toString() ?? '';
@@ -41,105 +42,107 @@ class OrderGenerationService {
       productPrices[productId] = price;
     }
     
-    // 3. Get the weekday name for target date (for weekly plan matching)
+    // 3. Get the weekday name for target date
     final weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-    final targetWeekday = weekdays[targetDate.weekday - 1]; // DateTime weekday is 1-7
+    final targetWeekday = weekdays[targetDate.weekday - 1];
     
     // 4. Process each subscription
     for (final sub in subscriptions) {
-      final userId = sub['user_id'] as String?;
-      final profile = sub['profiles'] as Map<String, dynamic>?;
-      final productId = sub['product_id'] as String?;
-      final planType = sub['plan_type'] as String? ?? 'monthly';
-      final isPaused = sub['is_paused'] as bool? ?? false;
-      
-      if (userId == null) continue;
-      
-      // Skip paused subscriptions
-      if (isPaused) {
-        print('Skipping paused subscription for user: $userId');
-        continue;
-      }
-      
-      // Check if this subscription should generate an order today based on plan type
-      if (!_shouldGenerateOrder(planType, targetWeekday, sub)) {
-        continue;
-      }
-      
-      // Check if order already exists for this user and date
-      final existingOrder = await client
-          .from('orders')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('delivery_date', targetDateStr)
-          .maybeSingle();
-      
-      if (existingOrder != null) continue; // Skip if order already exists
-      
-      // Create order
-      final orderResponse = await client
-          .from('orders')
-          .insert({
-            'user_id': userId,
-            'subscription_id': sub['id'],
-            'delivery_date': targetDateStr,
-            'status': 'pending',
-          })
-          .select()
-          .single();
-      
-      final orderId = orderResponse['id'] as String;
-      ordersCreated++;
-      
-      // Create order items
-      final quantity = sub['quantity'] as int? ?? 1;
-      
-      // Lookup product price from our cached map
-      final dailyPrice = productId != null ? (productPrices[productId] ?? 0.0) : 0.0;
-      
-      // Multiply by quantity for total daily cost
-      final totalDailyAmount = dailyPrice * quantity;
-      
-      // Try to debit from wallet
-      final debitSuccess = await WalletRepository.debitWallet(
-        userId: userId,
-        amount: totalDailyAmount,
-        description: 'Daily milk delivery - $targetDateStr',
-        orderId: orderId,
-      );
-      
-      // If wallet debit failed (insufficient balance), mark order as payment_pending
-      if (!debitSuccess) {
-        await client.from('orders')
-            .update({'status': 'payment_pending'})
-            .eq('id', orderId);
-      }
-      
-      if (productId != null) {
-        await client.from('order_items').insert({
+      try {
+        final userId = sub['user_id'] as String?;
+        final profile = sub['profiles'] as Map<String, dynamic>?;
+        final productId = sub['product_id'] as String?;
+        final planType = sub['plan_type'] as String? ?? 'monthly';
+        final isPaused = sub['is_paused'] as bool? ?? false;
+        
+        if (userId == null) continue;
+        
+        // Skip paused subscriptions
+        if (isPaused) continue;
+
+        // Skip if product doesn't exist anymore
+        if (productId != null && !productPrices.containsKey(productId)) {
+          print('Skipping subscription ${sub['id']}: Product $productId not found');
+          failed++;
+          continue;
+        }
+        
+        // Check if this subscription should generate an order today
+        if (!_shouldGenerateOrder(planType, targetWeekday, sub)) {
+          continue;
+        }
+        
+        // Check if order already exists
+        final existingOrder = await client
+            .from('orders')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('delivery_date', targetDateStr)
+            .maybeSingle();
+        
+        if (existingOrder != null) continue;
+        
+        // Create order
+        final orderResponse = await client
+            .from('orders')
+            .insert({
+              'user_id': userId,
+              'subscription_id': sub['id'],
+              'delivery_date': targetDateStr,
+              'status': 'pending',
+            })
+            .select()
+            .single();
+        
+        final orderId = orderResponse['id'] as String;
+        ordersCreated++;
+        
+        // Create order items
+        final quantity = sub['quantity'] as int? ?? 1;
+        final dailyPrice = productId != null ? (productPrices[productId] ?? 0.0) : 0.0;
+        final totalDailyAmount = dailyPrice * quantity;
+        
+        // Try to debit from wallet
+        final debitSuccess = await WalletRepository.debitWallet(
+          userId: userId,
+          amount: totalDailyAmount,
+          description: 'Daily milk delivery - $targetDateStr',
+          orderId: orderId,
+        );
+        
+        if (!debitSuccess) {
+          await client.from('orders')
+              .update({'status': 'payment_pending'})
+              .eq('id', orderId);
+        }
+        
+        if (productId != null) {
+          await client.from('order_items').insert({
+            'order_id': orderId,
+            'product_id': productId,
+            'quantity': quantity,
+            'price': dailyPrice,
+          });
+        }
+        
+        // Assign delivery person
+        String? assignedPersonId = profile?['assigned_delivery_person_id'] as String?;
+        
+        await client.from('deliveries').insert({
           'order_id': orderId,
-          'product_id': productId,
-          'quantity': quantity,
-          'price': dailyPrice,
+          'delivery_person_id': assignedPersonId,
+          'scheduled_date': targetDateStr,
+          'status': 'pending',
         });
-      }
-      
-      // Use assigned delivery person from customer profile (MANUAL ASSIGNMENT ONLY)
-      // No PIN code fallback - customers must be assigned via Assignments screen
-      String? assignedPersonId = profile?['assigned_delivery_person_id'] as String?;
-      
-      // Create delivery record
-      await client.from('deliveries').insert({
-        'order_id': orderId,
-        'delivery_person_id': assignedPersonId, // Null if not manually assigned
-        'scheduled_date': targetDateStr,
-        'status': 'pending',
-      });
-      
-      if (assignedPersonId != null) {
-        deliveriesAssigned++;
-      } else {
-        unassigned++;
+        
+        if (assignedPersonId != null) {
+          deliveriesAssigned++;
+        } else {
+          unassigned++;
+        }
+      } catch (e) {
+        print('Error processing subscription ${sub['id']}: $e');
+        failed++;
       }
     }
     
@@ -147,6 +150,7 @@ class OrderGenerationService {
       'orders_created': ordersCreated,
       'deliveries_assigned': deliveriesAssigned,
       'unassigned': unassigned,
+      'failed': failed,
     };
   }
   

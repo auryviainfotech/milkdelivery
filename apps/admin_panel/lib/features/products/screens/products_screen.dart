@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:data_table_2/data_table_2.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Provider for products from Supabase
 final productsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
@@ -141,7 +144,18 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                                             : Colors.orange.shade100,
                                         borderRadius: BorderRadius.circular(6),
                                       ),
-                                      child: Text(product['emoji'] ?? '🥛', style: const TextStyle(fontSize: 14)),
+                                      child: product['image_url'] != null 
+                                          ? ClipRRect(
+                                              borderRadius: BorderRadius.circular(4),
+                                              child: Image.network(
+                                                product['image_url'],
+                                                width: 32,
+                                                height: 32,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) => Text(product['emoji'] ?? '🥛', style: const TextStyle(fontSize: 14)),
+                                              ),
+                                            )
+                                          : Text(product['emoji'] ?? '🥛', style: const TextStyle(fontSize: 14)),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
@@ -250,6 +264,22 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     );
   }
 
+  Future<String?> _uploadImage(String fileName, Uint8List bytes) async {
+    try {
+      final path = 'product_images/$fileName';
+      await SupabaseService.client.storage.from('products').uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
+      return SupabaseService.client.storage.from('products').getPublicUrl(path);
+    } catch (e) {
+      debugPrint('Upload error: $e');
+      // If bucket doesn't exist, this will fail. Ideally handle this gracefully.
+      rethrow;
+    }
+  }
+
   void _showProductDialog(BuildContext context, {Map<String, dynamic>? product}) {
     final isEdit = product != null;
     final nameController = TextEditingController(text: product?['name'] ?? '');
@@ -258,6 +288,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final unitController = TextEditingController(text: product?['unit'] ?? '500ml');
     String selectedEmoji = product?['emoji'] ?? '🥛';
     String selectedCategory = product?['category'] ?? 'subscription';
+    Uint8List? selectedImageBytes;
     bool isLoading = false;
     String? errorMessage;
     
@@ -278,6 +309,21 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           if (!currentEmojis.contains(selectedEmoji)) {
             selectedEmoji = currentEmojis.first;
           }
+
+          Future<void> pickImage() async {
+            try {
+              final ImagePicker picker = ImagePicker();
+              final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+              if (image != null) {
+                final bytes = await image.readAsBytes();
+                setState(() {
+                  selectedImageBytes = bytes;
+                });
+              }
+            } catch (e) {
+              setState(() => errorMessage = 'Error picking image: $e');
+            }
+          }
           
           return AlertDialog(
             title: Text(isEdit ? 'Edit Product' : 'Add Product'),
@@ -288,6 +334,37 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Image Picker
+                    Center(
+                      child: GestureDetector(
+                        onTap: pickImage,
+                        child: Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                            image: selectedImageBytes != null
+                                ? DecorationImage(image: MemoryImage(selectedImageBytes!), fit: BoxFit.cover)
+                                : (product?['image_url'] != null
+                                    ? DecorationImage(image: NetworkImage(product!['image_url']), fit: BoxFit.cover)
+                                    : null),
+                          ),
+                          child: selectedImageBytes == null && product?['image_url'] == null
+                              ? const Icon(Icons.add_photo_alternate_outlined, size: 32, color: Colors.grey)
+                              : null,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(child: TextButton.icon(
+                      onPressed: pickImage,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Select Image'),
+                    )),
+                    const SizedBox(height: 16),
+
                     // Category selector
                     const Text('Product Category *', style: TextStyle(fontWeight: FontWeight.w500)),
                     const SizedBox(height: 8),
@@ -301,7 +378,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                                 Expanded(child: Text('Subscription', style: TextStyle(fontSize: 13))),
                               ],
                             ),
-                            subtitle: const Text('Daily milk delivery', style: TextStyle(fontSize: 11)),
+                            subtitle: const Text('Daily milk', style: TextStyle(fontSize: 11)),
                             value: 'subscription',
                             groupValue: selectedCategory,
                             contentPadding: EdgeInsets.zero,
@@ -316,7 +393,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                                 Expanded(child: Text('One-Time', style: TextStyle(fontSize: 13))),
                               ],
                             ),
-                            subtitle: const Text('Butter, Ghee, etc.', style: TextStyle(fontSize: 11)),
+                            subtitle: const Text('Butter, Ghee', style: TextStyle(fontSize: 11)),
                             value: 'one_time',
                             groupValue: selectedCategory,
                             contentPadding: EdgeInsets.zero,
@@ -329,8 +406,8 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                     const Divider(),
                     const SizedBox(height: 16),
                     
-                    // Emoji picker (filtered by category)
-                    const Text('Product Icon:', style: TextStyle(fontWeight: FontWeight.w500)),
+                    // Emoji picker
+                    const Text('Product Icon (Fallback):', style: TextStyle(fontWeight: FontWeight.w500)),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -372,9 +449,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       decoration: InputDecoration(
                         labelText: 'Description',
                         border: const OutlineInputBorder(),
-                        hintText: selectedCategory == 'subscription'
-                            ? 'e.g., Fresh pasteurised milk from KMF'
-                            : 'e.g., Fresh unsalted butter',
+                        hintText: 'e.g., Fresh unsalted butter',
                       ),
                       maxLines: 2,
                     ),
@@ -401,7 +476,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                             decoration: InputDecoration(
                               labelText: 'Unit/Pack Size',
                               border: const OutlineInputBorder(),
-                              hintText: selectedCategory == 'subscription' ? '500ml' : '500g',
+                              hintText: '500ml',
                             ),
                           ),
                         ),
@@ -454,6 +529,13 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                   });
                   
                   try {
+                    String? imageUrl = product?['image_url'];
+                    
+                    if (selectedImageBytes != null) {
+                      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+                      imageUrl = await _uploadImage(fileName, selectedImageBytes!);
+                    }
+
                     final data = {
                       'name': nameController.text.trim(),
                       'description': descController.text.trim(),
@@ -461,6 +543,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       'unit': unitController.text.trim().isEmpty ? '500ml' : unitController.text.trim(),
                       'emoji': selectedEmoji,
                       'category': selectedCategory,
+                      'image_url': imageUrl,
                       'is_active': true,
                     };
                     

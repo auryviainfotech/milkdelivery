@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// Provider for current delivery person's ID from SharedPreferences
 final deliveryPersonIdProvider = FutureProvider<String?>((ref) async {
   final prefs = await SharedPreferences.getInstance();
+  debugPrint('Using SharedPreferences keys: ${prefs.getKeys()}');
   return prefs.getString('delivery_person_id');
 });
 
@@ -25,62 +26,123 @@ final deliveryProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) asyn
   return response;
 });
 
+String _formatDateForQuery(DateTime date) {
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+String _normalizeDateValue(dynamic value) {
+  if (value is DateTime) {
+    return _formatDateForQuery(value);
+  }
+  final text = value?.toString() ?? '';
+  if (text.length >= 10) {
+    return text.substring(0, 10);
+  }
+  return text;
+}
+
+Future<List<Map<String, dynamic>>> _fetchDeliveriesForDate(
+  String personId,
+  String dateStr,
+) async {
+  debugPrint('Fetching deliveries for $dateStr');
+  final simpleResult = await SupabaseService.client
+      .from('deliveries')
+      .select('id, order_id, scheduled_date, status, delivery_person_id')
+      .eq('delivery_person_id', personId)
+      .eq('scheduled_date', dateStr);
+
+  debugPrint('Simple query found: ${simpleResult.length} deliveries');
+
+  if (simpleResult.isEmpty) {
+    return [];
+  }
+
+  try {
+    final fullResult = await SupabaseService.client
+        .from('deliveries')
+        .select('''
+          *,
+          orders (
+            id,
+            user_id,
+            subscription_id,
+            subscriptions (
+              delivery_slot,
+              product_id,
+              quantity,
+              products (name, unit, image_url)
+            ),
+            profiles (full_name, phone, address)
+          )
+        ''')
+        .eq('delivery_person_id', personId)
+        .eq('scheduled_date', dateStr)
+        .order('created_at');
+
+    debugPrint('JOIN query found: ${fullResult.length} deliveries');
+
+    if (fullResult.isNotEmpty) {
+      final deliveries = List<Map<String, dynamic>>.from(fullResult);
+      deliveries.sort((a, b) {
+        final slotA = a['orders']?['subscriptions']?['delivery_slot'] ?? 'morning';
+        final slotB = b['orders']?['subscriptions']?['delivery_slot'] ?? 'morning';
+        return slotA.compareTo(slotB);
+      });
+      return deliveries;
+    }
+  } catch (joinError) {
+    debugPrint('JOIN query failed: $joinError');
+  }
+
+  debugPrint('Using simple result as fallback');
+  return List<Map<String, dynamic>>.from(simpleResult);
+}
+
 /// Provider for today's deliveries assigned to this delivery person
 final todayDeliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final personId = await ref.watch(deliveryPersonIdProvider.future);
-  print('DEBUG: Delivery Person ID from prefs: $personId');
+  debugPrint('=== DELIVERY FETCH ===');
+  debugPrint('PersonId from SharedPrefs: $personId');
   
   if (personId == null) {
-    print('DEBUG: No Person ID found! Returning empty.');
+    debugPrint('PersonId is NULL - user not logged in');
     return [];
   }
   
   final today = DateTime.now();
-  final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-  print('DEBUG: Fetching orders for date: $todayStr');
+  final todayStr = _formatDateForQuery(today);
+  debugPrint('Date: $todayStr');
   
   try {
-    // Get orders for today where the customer is assigned to this delivery person
-    // Include subscription to get delivery_slot
-    final response = await SupabaseService.client
-        .from('orders')
-        .select('*, profiles!orders_user_id_fkey(id, full_name, address, phone, assigned_delivery_person_id), subscriptions!orders_subscription_id_fkey(delivery_slot)')
-        .eq('delivery_date', todayStr)
-        .order('created_at');
-    
-    // Filter to only orders where customer is assigned to this delivery person
-    final filteredOrders = (response as List).where((order) {
-      final profile = order['profiles'];
-      if (profile == null) return false;
-      return profile['assigned_delivery_person_id'] == personId;
-    }).toList();
-    
-    // Sort by time slot (morning first, then evening)
-    filteredOrders.sort((a, b) {
-      final slotA = a['subscriptions']?['delivery_slot'] ?? 'morning';
-      final slotB = b['subscriptions']?['delivery_slot'] ?? 'morning';
-      return slotA.compareTo(slotB);
-    });
-        
-    print('DEBUG: Fetched ${filteredOrders.length} orders for assigned customers');
-    
-    // Debug: Print each order ID
-    for (final order in filteredOrders) {
-      print('DEBUG: Order ID: ${order['id']} (type: ${order['id'].runtimeType})');
+    final todayDeliveries = await _fetchDeliveriesForDate(personId, todayStr);
+    if (todayDeliveries.isNotEmpty) {
+      return todayDeliveries;
     }
+
+    debugPrint('No deliveries found for today, checking next available date');
+    final nextDateResult = await SupabaseService.client
+        .from('deliveries')
+        .select('scheduled_date')
+        .eq('delivery_person_id', personId)
+        .gte('scheduled_date', todayStr)
+        .order('scheduled_date')
+        .limit(1);
+
+    if (nextDateResult.isEmpty) {
+      return [];
+    }
+
+    final nextDateStr = _normalizeDateValue(nextDateResult.first['scheduled_date']);
+    if (nextDateStr.isEmpty) {
+      return [];
+    }
+
+    return _fetchDeliveriesForDate(personId, nextDateStr);
     
-    // Transform to the expected format (matching old deliveries structure)
-    return filteredOrders.map((order) => <String, dynamic>{
-      'id': order['id'],
-      'order_id': order['id'],
-      'status': order['status'] ?? 'pending',
-      'delivered_at': order['delivered_at'],
-      'delivery_slot': order['subscriptions']?['delivery_slot'] ?? 'morning',
-      'orders': order, // Nest the order for compatibility
-    }).toList();
   } catch (e, stack) {
-    print('DEBUG: Error fetching orders: $e');
-    print(stack);
+    debugPrint('ERROR fetching deliveries: $e');
+    debugPrint('Stack: $stack');
     return [];
   }
 });
@@ -265,6 +327,22 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                                   'Pull down to refresh',
                                   style: TextStyle(color: colorScheme.onSurfaceVariant),
                                 ),
+                                const SizedBox(height: 16),
+                                // DEBUG INFO - shows logged in user's ID
+                                Consumer(
+                                  builder: (context, ref, _) {
+                                    final personIdAsync = ref.watch(deliveryPersonIdProvider);
+                                    return personIdAsync.when(
+                                      data: (id) => Text(
+                                        'Debug: Logged in as\n$id',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                                      ),
+                                      loading: () => const Text('Loading ID...', style: TextStyle(fontSize: 10)),
+                                      error: (e, _) => Text('ID Error: $e', style: const TextStyle(fontSize: 10, color: Colors.red)),
+                                    );
+                                  },
+                                ),
                               ],
                             ),
                           ),
@@ -406,15 +484,22 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     final colorScheme = theme.colorScheme;
     final status = delivery['status'] ?? 'pending';
     final isDelivered = status == 'delivered';
-    final deliverySlot = delivery['delivery_slot'] ?? 'morning';
-    final isMorning = deliverySlot == 'morning';
     
-    // Get customer info from nested order/profile
+    // Parse nested data
     final order = delivery['orders'] as Map<String, dynamic>?;
-    final customer = order?['profiles'] as Map<String, dynamic>?;
-    final customerName = customer?['full_name'] ?? 'Customer';
-    final address = customer?['address'] ?? 'Address not available';
-    final phone = customer?['phone'] ?? '';
+    final subscription = order?['subscriptions'] as Map<String, dynamic>?;
+    final profile = order?['profiles'] as Map<String, dynamic>?;
+    final product = subscription?['products'] as Map<String, dynamic>?;
+    
+    // Extract values
+    final customerName = profile?['full_name'] ?? 'Customer';
+    final address = profile?['address'] ?? 'No address provided';
+    final phone = profile?['phone'] ?? '';
+    final productName = product?['name'] ?? 'Milk';
+    final unit = product?['unit'] ?? 'L';
+    final quantity = subscription?['quantity'] ?? 1;
+    final deliverySlot = subscription?['delivery_slot'] ?? 'morning';
+    final isMorning = deliverySlot == 'morning';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -441,7 +526,7 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row
+            // Header Row: Avatar + Name + Call Button
             Row(
               children: [
                 CircleAvatar(
@@ -449,7 +534,7 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       ? AppTheme.successColor.withOpacity(0.2)
                       : colorScheme.primaryContainer,
                   child: Text(
-                    customerName[0].toUpperCase(),
+                    customerName.isNotEmpty ? customerName[0].toUpperCase() : '?',
                     style: TextStyle(
                       color: isDelivered 
                           ? AppTheme.successColor
@@ -459,58 +544,45 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              customerName,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                decoration: isDelivered ? TextDecoration.lineThrough : null,
-                              ),
+                      Text(
+                        customerName,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          decoration: isDelivered ? TextDecoration.lineThrough : null,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on, size: 12, color: colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              address,
+                              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                             ),
-                            if (phone.isNotEmpty)
-                              Text(
-                                phone,
-                                style: TextStyle(color: colorScheme.primary, fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      // Status indicator for delivered
-                      if (isDelivered) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppTheme.successColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.check_circle, size: 14, color: AppTheme.successColor),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Done',
-                                style: TextStyle(
-                                  color: AppTheme.successColor,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
+                if (phone.isNotEmpty)
+                  IconButton.filledTonal(
+                    onPressed: () => _makeCall(phone),
+                    icon: const Icon(Icons.call, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.green.withOpacity(0.1),
+                      foregroundColor: Colors.green,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -549,8 +621,31 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       ],
                     ),
                   ),
+                  // Product Name Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.local_drink, size: 12, color: Colors.purple.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          delivery['orders']?['subscriptions']?['products']?['name'] ?? 'Milk',
+                          style: TextStyle(
+                            color: Colors.purple.shade700,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   // Liters Badge (Subscription orders)
-                  if (order?['order_type'] != 'one_time')
+                  if (order?['quantity'] != null) // Removed 'order_type' check as subscription orders have quantity in orders table
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -617,22 +712,40 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
               ),
             const SizedBox(height: 12),
             
-            // Address
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Divider(height: 1),
+            ),
+            
+            // Product Details Row
             Row(
               children: [
-                Icon(Icons.location_on_outlined, size: 16, color: colorScheme.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    address,
-                    style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondaryContainer.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(10),
                   ),
+                  child: Icon(Icons.inventory_2_outlined, color: colorScheme.secondary),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$quantity $unit $productName',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    ),
+                    Text(
+                      '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            
+            const SizedBox(height: 24),
             
             // Action Buttons - Better layout
             if (!isDelivered)
@@ -689,7 +802,6 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                         flex: 2,
                         child: FilledButton.icon(
                           onPressed: () {
-                            print('DEBUG: Navigating to delivery with ID: ${delivery['id']}');
                             context.push('/delivery/${delivery['id']}');
                           },
                           icon: const Icon(Icons.qr_code_scanner, size: 20),

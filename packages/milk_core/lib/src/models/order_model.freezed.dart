@@ -21,11 +21,21 @@ OrderModel _$OrderModelFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$OrderModel {
   String get id => throw _privateConstructorUsedError;
+  @JsonKey(name: 'user_id')
   String get userId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'subscription_id')
   String? get subscriptionId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'delivery_date')
   DateTime get deliveryDate => throw _privateConstructorUsedError;
   OrderStatus get status => throw _privateConstructorUsedError;
+  @JsonKey(name: 'created_at')
   DateTime? get createdAt => throw _privateConstructorUsedError;
+  @JsonKey(name: 'payment_method')
+  String? get paymentMethod => throw _privateConstructorUsedError;
+  @JsonKey(name: 'total_amount')
+  double? get totalAmount => throw _privateConstructorUsedError;
+  @JsonKey(name: 'order_type')
+  String? get orderType => throw _privateConstructorUsedError;
 
   /// Serializes this OrderModel to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -45,11 +55,14 @@ abstract class $OrderModelCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String userId,
-      String? subscriptionId,
-      DateTime deliveryDate,
+      @JsonKey(name: 'user_id') String userId,
+      @JsonKey(name: 'subscription_id') String? subscriptionId,
+      @JsonKey(name: 'delivery_date') DateTime deliveryDate,
       OrderStatus status,
-      DateTime? createdAt});
+      @JsonKey(name: 'created_at') DateTime? createdAt,
+      @JsonKey(name: 'payment_method') String? paymentMethod,
+      @JsonKey(name: 'total_amount') double? totalAmount,
+      @JsonKey(name: 'order_type') String? orderType});
 }
 
 /// @nodoc
@@ -73,6 +86,9 @@ class _$OrderModelCopyWithImpl<$Res, $Val extends OrderModel>
     Object? deliveryDate = null,
     Object? status = null,
     Object? createdAt = freezed,
+    Object? paymentMethod = freezed,
+    Object? totalAmount = freezed,
+    Object? orderType = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -99,6 +115,18 @@ class _$OrderModelCopyWithImpl<$Res, $Val extends OrderModel>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      paymentMethod: freezed == paymentMethod
+          ? _value.paymentMethod
+          : paymentMethod // ignore: cast_nullable_to_non_nullable
+              as String?,
+      totalAmount: freezed == totalAmount
+          ? _value.totalAmount
+          : totalAmount // ignore: cast_nullable_to_non_nullable
+              as double?,
+      orderType: freezed == orderType
+          ? _value.orderType
+          : orderType // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -113,11 +141,14 @@ abstract class _$$OrderModelImplCopyWith<$Res>
   @useResult
   $Res call(
       {String id,
-      String userId,
-      String? subscriptionId,
-      DateTime deliveryDate,
+      @JsonKey(name: 'user_id') String userId,
+      @JsonKey(name: 'subscription_id') String? subscriptionId,
+      @JsonKey(name: 'delivery_date') DateTime deliveryDate,
       OrderStatus status,
-      DateTime? createdAt});
+      @JsonKey(name: 'created_at') DateTime? createdAt,
+      @JsonKey(name: 'payment_method') String? paymentMethod,
+      @JsonKey(name: 'total_amount') double? totalAmount,
+      @JsonKey(name: 'order_type') String? orderType});
 }
 
 /// @nodoc
@@ -139,6 +170,9 @@ class __$$OrderModelImplCopyWithImpl<$Res>
     Object? deliveryDate = null,
     Object? status = null,
     Object? createdAt = freezed,
+    Object? paymentMethod = freezed,
+    Object? totalAmount = freezed,
+    Object? orderType = freezed,
   }) {
     return _then(_$OrderModelImpl(
       id: null == id
@@ -165,6 +199,18 @@ class __$$OrderModelImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      paymentMethod: freezed == paymentMethod
+          ? _value.paymentMethod
+          : paymentMethod // ignore: cast_nullable_to_non_nullable
+              as String?,
+      totalAmount: freezed == totalAmount
+          ? _value.totalAmount
+          : totalAmount // ignore: cast_nullable_to_non_nullable
+              as double?,
+      orderType: freezed == orderType
+          ? _value.orderType
+          : orderType // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -174,11 +220,14 @@ class __$$OrderModelImplCopyWithImpl<$Res>
 class _$OrderModelImpl implements _OrderModel {
   const _$OrderModelImpl(
       {required this.id,
-      required this.userId,
-      this.subscriptionId,
-      required this.deliveryDate,
+      @JsonKey(name: 'user_id') required this.userId,
+      @JsonKey(name: 'subscription_id') this.subscriptionId,
+      @JsonKey(name: 'delivery_date') required this.deliveryDate,
       this.status = OrderStatus.pending,
-      this.createdAt});
+      @JsonKey(name: 'created_at') this.createdAt,
+      @JsonKey(name: 'payment_method') this.paymentMethod,
+      @JsonKey(name: 'total_amount') this.totalAmount,
+      @JsonKey(name: 'order_type') this.orderType});
 
   factory _$OrderModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$OrderModelImplFromJson(json);
@@ -186,20 +235,33 @@ class _$OrderModelImpl implements _OrderModel {
   @override
   final String id;
   @override
+  @JsonKey(name: 'user_id')
   final String userId;
   @override
+  @JsonKey(name: 'subscription_id')
   final String? subscriptionId;
   @override
+  @JsonKey(name: 'delivery_date')
   final DateTime deliveryDate;
   @override
   @JsonKey()
   final OrderStatus status;
   @override
+  @JsonKey(name: 'created_at')
   final DateTime? createdAt;
+  @override
+  @JsonKey(name: 'payment_method')
+  final String? paymentMethod;
+  @override
+  @JsonKey(name: 'total_amount')
+  final double? totalAmount;
+  @override
+  @JsonKey(name: 'order_type')
+  final String? orderType;
 
   @override
   String toString() {
-    return 'OrderModel(id: $id, userId: $userId, subscriptionId: $subscriptionId, deliveryDate: $deliveryDate, status: $status, createdAt: $createdAt)';
+    return 'OrderModel(id: $id, userId: $userId, subscriptionId: $subscriptionId, deliveryDate: $deliveryDate, status: $status, createdAt: $createdAt, paymentMethod: $paymentMethod, totalAmount: $totalAmount, orderType: $orderType)';
   }
 
   @override
@@ -215,13 +277,19 @@ class _$OrderModelImpl implements _OrderModel {
                 other.deliveryDate == deliveryDate) &&
             (identical(other.status, status) || other.status == status) &&
             (identical(other.createdAt, createdAt) ||
-                other.createdAt == createdAt));
+                other.createdAt == createdAt) &&
+            (identical(other.paymentMethod, paymentMethod) ||
+                other.paymentMethod == paymentMethod) &&
+            (identical(other.totalAmount, totalAmount) ||
+                other.totalAmount == totalAmount) &&
+            (identical(other.orderType, orderType) ||
+                other.orderType == orderType));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, id, userId, subscriptionId, deliveryDate, status, createdAt);
+  int get hashCode => Object.hash(runtimeType, id, userId, subscriptionId,
+      deliveryDate, status, createdAt, paymentMethod, totalAmount, orderType);
 
   /// Create a copy of OrderModel
   /// with the given fields replaced by the non-null parameter values.
@@ -242,11 +310,14 @@ class _$OrderModelImpl implements _OrderModel {
 abstract class _OrderModel implements OrderModel {
   const factory _OrderModel(
       {required final String id,
-      required final String userId,
-      final String? subscriptionId,
-      required final DateTime deliveryDate,
+      @JsonKey(name: 'user_id') required final String userId,
+      @JsonKey(name: 'subscription_id') final String? subscriptionId,
+      @JsonKey(name: 'delivery_date') required final DateTime deliveryDate,
       final OrderStatus status,
-      final DateTime? createdAt}) = _$OrderModelImpl;
+      @JsonKey(name: 'created_at') final DateTime? createdAt,
+      @JsonKey(name: 'payment_method') final String? paymentMethod,
+      @JsonKey(name: 'total_amount') final double? totalAmount,
+      @JsonKey(name: 'order_type') final String? orderType}) = _$OrderModelImpl;
 
   factory _OrderModel.fromJson(Map<String, dynamic> json) =
       _$OrderModelImpl.fromJson;
@@ -254,15 +325,28 @@ abstract class _OrderModel implements OrderModel {
   @override
   String get id;
   @override
+  @JsonKey(name: 'user_id')
   String get userId;
   @override
+  @JsonKey(name: 'subscription_id')
   String? get subscriptionId;
   @override
+  @JsonKey(name: 'delivery_date')
   DateTime get deliveryDate;
   @override
   OrderStatus get status;
   @override
+  @JsonKey(name: 'created_at')
   DateTime? get createdAt;
+  @override
+  @JsonKey(name: 'payment_method')
+  String? get paymentMethod;
+  @override
+  @JsonKey(name: 'total_amount')
+  double? get totalAmount;
+  @override
+  @JsonKey(name: 'order_type')
+  String? get orderType;
 
   /// Create a copy of OrderModel
   /// with the given fields replaced by the non-null parameter values.
@@ -279,7 +363,9 @@ OrderItem _$OrderItemFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$OrderItem {
   String get id => throw _privateConstructorUsedError;
+  @JsonKey(name: 'order_id')
   String get orderId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'product_id')
   String get productId => throw _privateConstructorUsedError;
   int get quantity => throw _privateConstructorUsedError;
   double get price => throw _privateConstructorUsedError;
@@ -301,8 +387,8 @@ abstract class $OrderItemCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String orderId,
-      String productId,
+      @JsonKey(name: 'order_id') String orderId,
+      @JsonKey(name: 'product_id') String productId,
       int quantity,
       double price});
 }
@@ -363,8 +449,8 @@ abstract class _$$OrderItemImplCopyWith<$Res>
   @useResult
   $Res call(
       {String id,
-      String orderId,
-      String productId,
+      @JsonKey(name: 'order_id') String orderId,
+      @JsonKey(name: 'product_id') String productId,
       int quantity,
       double price});
 }
@@ -418,8 +504,8 @@ class __$$OrderItemImplCopyWithImpl<$Res>
 class _$OrderItemImpl implements _OrderItem {
   const _$OrderItemImpl(
       {required this.id,
-      required this.orderId,
-      required this.productId,
+      @JsonKey(name: 'order_id') required this.orderId,
+      @JsonKey(name: 'product_id') required this.productId,
       required this.quantity,
       required this.price});
 
@@ -429,8 +515,10 @@ class _$OrderItemImpl implements _OrderItem {
   @override
   final String id;
   @override
+  @JsonKey(name: 'order_id')
   final String orderId;
   @override
+  @JsonKey(name: 'product_id')
   final String productId;
   @override
   final int quantity;
@@ -480,8 +568,8 @@ class _$OrderItemImpl implements _OrderItem {
 abstract class _OrderItem implements OrderItem {
   const factory _OrderItem(
       {required final String id,
-      required final String orderId,
-      required final String productId,
+      @JsonKey(name: 'order_id') required final String orderId,
+      @JsonKey(name: 'product_id') required final String productId,
       required final int quantity,
       required final double price}) = _$OrderItemImpl;
 
@@ -491,8 +579,10 @@ abstract class _OrderItem implements OrderItem {
   @override
   String get id;
   @override
+  @JsonKey(name: 'order_id')
   String get orderId;
   @override
+  @JsonKey(name: 'product_id')
   String get productId;
   @override
   int get quantity;
@@ -514,13 +604,20 @@ DeliveryModel _$DeliveryModelFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$DeliveryModel {
   String get id => throw _privateConstructorUsedError;
+  @JsonKey(name: 'order_id')
   String get orderId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'delivery_person_id')
   String get deliveryPersonId => throw _privateConstructorUsedError;
+  @JsonKey(name: 'scheduled_date')
   DateTime get scheduledDate => throw _privateConstructorUsedError;
+  @JsonKey(name: 'delivered_at')
   DateTime? get deliveredAt => throw _privateConstructorUsedError;
+  @JsonKey(name: 'qr_scanned')
   bool get qrScanned => throw _privateConstructorUsedError;
   DeliveryStatus get status => throw _privateConstructorUsedError;
+  @JsonKey(name: 'issue_notes')
   String? get issueNotes => throw _privateConstructorUsedError;
+  @JsonKey(name: 'created_at')
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
   /// Serializes this DeliveryModel to a JSON map.
@@ -541,14 +638,14 @@ abstract class $DeliveryModelCopyWith<$Res> {
   @useResult
   $Res call(
       {String id,
-      String orderId,
-      String deliveryPersonId,
-      DateTime scheduledDate,
-      DateTime? deliveredAt,
-      bool qrScanned,
+      @JsonKey(name: 'order_id') String orderId,
+      @JsonKey(name: 'delivery_person_id') String deliveryPersonId,
+      @JsonKey(name: 'scheduled_date') DateTime scheduledDate,
+      @JsonKey(name: 'delivered_at') DateTime? deliveredAt,
+      @JsonKey(name: 'qr_scanned') bool qrScanned,
       DeliveryStatus status,
-      String? issueNotes,
-      DateTime? createdAt});
+      @JsonKey(name: 'issue_notes') String? issueNotes,
+      @JsonKey(name: 'created_at') DateTime? createdAt});
 }
 
 /// @nodoc
@@ -627,14 +724,14 @@ abstract class _$$DeliveryModelImplCopyWith<$Res>
   @useResult
   $Res call(
       {String id,
-      String orderId,
-      String deliveryPersonId,
-      DateTime scheduledDate,
-      DateTime? deliveredAt,
-      bool qrScanned,
+      @JsonKey(name: 'order_id') String orderId,
+      @JsonKey(name: 'delivery_person_id') String deliveryPersonId,
+      @JsonKey(name: 'scheduled_date') DateTime scheduledDate,
+      @JsonKey(name: 'delivered_at') DateTime? deliveredAt,
+      @JsonKey(name: 'qr_scanned') bool qrScanned,
       DeliveryStatus status,
-      String? issueNotes,
-      DateTime? createdAt});
+      @JsonKey(name: 'issue_notes') String? issueNotes,
+      @JsonKey(name: 'created_at') DateTime? createdAt});
 }
 
 /// @nodoc
@@ -706,14 +803,14 @@ class __$$DeliveryModelImplCopyWithImpl<$Res>
 class _$DeliveryModelImpl implements _DeliveryModel {
   const _$DeliveryModelImpl(
       {required this.id,
-      required this.orderId,
-      required this.deliveryPersonId,
-      required this.scheduledDate,
-      this.deliveredAt,
-      this.qrScanned = false,
+      @JsonKey(name: 'order_id') required this.orderId,
+      @JsonKey(name: 'delivery_person_id') required this.deliveryPersonId,
+      @JsonKey(name: 'scheduled_date') required this.scheduledDate,
+      @JsonKey(name: 'delivered_at') this.deliveredAt,
+      @JsonKey(name: 'qr_scanned') this.qrScanned = false,
       this.status = DeliveryStatus.pending,
-      this.issueNotes,
-      this.createdAt});
+      @JsonKey(name: 'issue_notes') this.issueNotes,
+      @JsonKey(name: 'created_at') this.createdAt});
 
   factory _$DeliveryModelImpl.fromJson(Map<String, dynamic> json) =>
       _$$DeliveryModelImplFromJson(json);
@@ -721,22 +818,28 @@ class _$DeliveryModelImpl implements _DeliveryModel {
   @override
   final String id;
   @override
+  @JsonKey(name: 'order_id')
   final String orderId;
   @override
+  @JsonKey(name: 'delivery_person_id')
   final String deliveryPersonId;
   @override
+  @JsonKey(name: 'scheduled_date')
   final DateTime scheduledDate;
   @override
+  @JsonKey(name: 'delivered_at')
   final DateTime? deliveredAt;
   @override
-  @JsonKey()
+  @JsonKey(name: 'qr_scanned')
   final bool qrScanned;
   @override
   @JsonKey()
   final DeliveryStatus status;
   @override
+  @JsonKey(name: 'issue_notes')
   final String? issueNotes;
   @override
+  @JsonKey(name: 'created_at')
   final DateTime? createdAt;
 
   @override
@@ -790,13 +893,15 @@ class _$DeliveryModelImpl implements _DeliveryModel {
 abstract class _DeliveryModel implements DeliveryModel {
   const factory _DeliveryModel(
       {required final String id,
-      required final String orderId,
+      @JsonKey(name: 'order_id') required final String orderId,
+      @JsonKey(name: 'delivery_person_id')
       required final String deliveryPersonId,
-      required final DateTime scheduledDate,
-      final DateTime? deliveredAt,
-      final bool qrScanned,
+      @JsonKey(name: 'scheduled_date') required final DateTime scheduledDate,
+      @JsonKey(name: 'delivered_at') final DateTime? deliveredAt,
+      @JsonKey(name: 'qr_scanned') final bool qrScanned,
       final DeliveryStatus status,
-      final String? issueNotes,
+      @JsonKey(name: 'issue_notes') final String? issueNotes,
+      @JsonKey(name: 'created_at')
       final DateTime? createdAt}) = _$DeliveryModelImpl;
 
   factory _DeliveryModel.fromJson(Map<String, dynamic> json) =
@@ -805,20 +910,27 @@ abstract class _DeliveryModel implements DeliveryModel {
   @override
   String get id;
   @override
+  @JsonKey(name: 'order_id')
   String get orderId;
   @override
+  @JsonKey(name: 'delivery_person_id')
   String get deliveryPersonId;
   @override
+  @JsonKey(name: 'scheduled_date')
   DateTime get scheduledDate;
   @override
+  @JsonKey(name: 'delivered_at')
   DateTime? get deliveredAt;
   @override
+  @JsonKey(name: 'qr_scanned')
   bool get qrScanned;
   @override
   DeliveryStatus get status;
   @override
+  @JsonKey(name: 'issue_notes')
   String? get issueNotes;
   @override
+  @JsonKey(name: 'created_at')
   DateTime? get createdAt;
 
   /// Create a copy of DeliveryModel

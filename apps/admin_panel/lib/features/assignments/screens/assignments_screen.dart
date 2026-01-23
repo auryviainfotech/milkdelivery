@@ -541,10 +541,29 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
   Future<void> _assignCustomer(
       String customerId, String? deliveryPersonId) async {
     try {
+      // 1. Update customer profile assignment
       await SupabaseService.client
           .from('profiles')
           .update({'assigned_delivery_person_id': deliveryPersonId}).eq(
               'id', customerId);
+
+      // 2. Update all pending deliveries for this customer to use the new delivery person
+      // First, get all order IDs for this customer
+      final ordersResponse = await SupabaseService.client
+          .from('orders')
+          .select('id')
+          .eq('user_id', customerId);
+      
+      final orderIds = (ordersResponse as List).map((o) => o['id'] as String).toList();
+      
+      if (orderIds.isNotEmpty) {
+        // Update pending deliveries for these orders
+        await SupabaseService.client
+            .from('deliveries')
+            .update({'delivery_person_id': deliveryPersonId})
+            .inFilter('order_id', orderIds)
+            .eq('status', 'pending');
+      }
 
       ref.invalidate(customersProvider);
       ref.invalidate(customerCountProvider);
@@ -554,7 +573,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
           SnackBar(
             content: Text(deliveryPersonId == null
                 ? 'Customer unassigned'
-                : 'Customer assigned successfully'),
+                : 'Customer assigned & pending deliveries updated'),
             backgroundColor: AppTheme.successColor,
           ),
         );

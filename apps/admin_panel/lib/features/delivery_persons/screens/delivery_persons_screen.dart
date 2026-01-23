@@ -1,9 +1,9 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Provider for delivery persons list
 final deliveryPersonsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
@@ -202,8 +202,6 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                   person['phone'] ?? 'No phone',
                   style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
-                // Show service PIN codes
-                  _buildPinCodesRow(person, colorScheme),
               ],
             ),
           ),
@@ -263,61 +261,10 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
     );
   }
 
-  Widget _buildPinCodesRow(Map<String, dynamic> person, ColorScheme colorScheme) {
-    // Check for service_pin_codes array first, then fall back to qr_code
-    final servicePinCodes = person['service_pin_codes'] as List<dynamic>?;
-    final legacyArea = person['qr_code'] as String?;
-    
-    if ((servicePinCodes == null || servicePinCodes.isEmpty) && 
-        (legacyArea == null || legacyArea.isEmpty)) {
-      return const SizedBox.shrink();
-    }
-    
-    if (servicePinCodes != null && servicePinCodes.isNotEmpty) {
-      return Row(
-        children: [
-          Icon(Icons.pin_drop, size: 14, color: colorScheme.primary),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              servicePinCodes.join(', '),
-              style: TextStyle(
-                color: colorScheme.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
-    }
-    
-    // Fallback to legacy qr_code field
-    return Row(
-      children: [
-        Icon(Icons.location_on, size: 14, color: colorScheme.primary),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            legacyArea!,
-            style: TextStyle(
-              color: colorScheme.primary,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
   Future<void> _showAddDialog(BuildContext context) async {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
     final passwordController = TextEditingController();
-    final areaController = TextEditingController();
     bool isLoading = false;
 
     await showDialog(
@@ -364,17 +311,6 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                     helperText: 'Share this password without spaces',
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: areaController,
-                  decoration: const InputDecoration(
-                    labelText: 'Service PIN Codes',
-                    prefixIcon: Icon(Icons.pin_drop_outlined),
-                    border: OutlineInputBorder(),
-                    hintText: 'e.g., 500001, 500002, 500003',
-                    helperText: 'Comma-separated PIN codes this person will serve',
-                  ),
-                ),
               ],
             ),
           ),
@@ -399,29 +335,69 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                       setState(() => isLoading = true);
 
                       try {
-                        // Simple direct insert - FK constraint removed
-                        // Generate a proper UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-                        final r = Random();
-                        String hex(int n) => List.generate(n, (_) => r.nextInt(16).toRadixString(16)).join();
-                        final uniqueId = '${hex(8)}-${hex(4)}-4${hex(3)}-${['8','9','a','b'][r.nextInt(4)]}${hex(3)}-${hex(12)}';
-                        
-                        // Parse PIN codes from comma-separated input
-                        final pinCodes = areaController.text
-                            .split(',')
-                            .map((p) => p.trim())
-                            .where((p) => p.isNotEmpty && RegExp(r'^\d{6}$').hasMatch(p))
-                            .toList();
+                        final rawPhone = phoneController.text.trim();
+                        final formattedPhone = '+91$rawPhone';
+                        final authEmail = 'delivery_$rawPhone@milkdelivery.local';
+                        final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+                        final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+                        final localStorage = SharedPreferencesLocalStorage(
+                          persistSessionKey: 'temp_delivery_creation_session',
+                        );
+                        await localStorage.initialize();
+                        final tempClient = SupabaseClient(
+                          supabaseUrl,
+                          supabaseAnonKey,
+                          authOptions: FlutterAuthClientOptions(
+                            localStorage: localStorage,
+                            authFlowType: AuthFlowType.implicit,
+                          ),
+                        );
+                        final authResponse = await tempClient.auth.signUp(
+                          email: authEmail,
+                          password: passwordController.text,
+                        );
+                        final newUserId = authResponse.user?.id;
+                        if (newUserId == null) {
+                          throw Exception('Failed to create delivery login');
+                        }
+
+                        final signInResponse = await tempClient.auth.signInWithPassword(
+                          email: authEmail,
+                          password: passwordController.text,
+                        );
+                        final signedInUserId = signInResponse.user?.id;
+                        if (signedInUserId == null) {
+                          throw Exception('Failed to sign in delivery account');
+                        }
+
+                        // Use ADMIN client to insert profile (RLS allows admin to insert)
+                        debugPrint('=== CREATING DELIVERY PERSON ===');
+                        debugPrint('Auth User ID: $newUserId');
+                        debugPrint('Email: $authEmail');
+                        debugPrint('Phone: $formattedPhone');
                         
                         await SupabaseService.client.from('profiles').insert({
-                          'id': uniqueId,
+                          'id': newUserId,
                           'full_name': nameController.text.trim(),
-                          'phone': '+91${phoneController.text}',
+                          'phone': formattedPhone,
                           'role': 'delivery',
-                          'address': passwordController.text, // Store password in address field for login
-                          'qr_code': areaController.text.trim().isNotEmpty ? areaController.text.trim() : null, // Legacy area field
-                          'service_pin_codes': pinCodes.isNotEmpty ? pinCodes : null,
+                          'address': passwordController.text,
                           'created_at': DateTime.now().toIso8601String(),
                         });
+                        
+                        // VERIFICATION: Confirm the profile was actually created
+                        final verifyProfile = await SupabaseService.client
+                            .from('profiles')
+                            .select('id, full_name, role')
+                            .eq('id', newUserId)
+                            .maybeSingle();
+                        
+                        if (verifyProfile == null) {
+                          throw Exception('Profile creation failed - profile not found after insert. Auth user was created but profile was not.');
+                        }
+                        
+                        debugPrint('Profile verified: ${verifyProfile['full_name']} (${verifyProfile['role']})');
+                        debugPrint('=== DELIVERY PERSON CREATED SUCCESSFULLY ===');
                         
                         // Dispose temp client if possible, or just let garbage collector handle it
 
@@ -482,9 +458,6 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
 
   Future<void> _showEditDialog(BuildContext context, Map<String, dynamic> person) async {
     final nameController = TextEditingController(text: person['full_name']);
-    // Convert service_pin_codes array to comma-separated string
-    final existingPins = (person['service_pin_codes'] as List<dynamic>?)?.join(', ') ?? person['qr_code'] ?? '';
-    final pinCodesController = TextEditingController(text: existingPins);
 
     await showDialog(
       context: context,
@@ -503,17 +476,6 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: pinCodesController,
-                decoration: const InputDecoration(
-                  labelText: 'Service PIN Codes',
-                  prefixIcon: Icon(Icons.pin_drop_outlined),
-                  border: OutlineInputBorder(),
-                  hintText: 'e.g., 500001, 500002, 500003',
-                  helperText: 'Comma-separated PIN codes',
-                ),
-              ),
             ],
           ),
         ),
@@ -525,17 +487,8 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
           FilledButton(
             onPressed: () async {
               try {
-                // Parse PIN codes
-                final pinCodes = pinCodesController.text
-                    .split(',')
-                    .map((p) => p.trim())
-                    .where((p) => p.isNotEmpty && RegExp(r'^\d{6}$').hasMatch(p))
-                    .toList();
-                
                 await SupabaseService.client.from('profiles').update({
                   'full_name': nameController.text.trim(),
-                  'service_pin_codes': pinCodes.isNotEmpty ? pinCodes : null,
-                  'qr_code': pinCodesController.text.trim().isNotEmpty ? pinCodesController.text.trim() : null,
                 }).eq('id', person['id']);
 
                 if (context.mounted) {

@@ -364,9 +364,11 @@ class DashboardScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  FilledButton(
-                    onPressed: () => context.push('/subscriptions'),
-                    child: const Text('Subscribe'),
+                  Flexible(
+                    child: FilledButton(
+                      onPressed: () => context.push('/subscriptions'),
+                      child: const Text('Subscribe'),
+                    ),
                   ),
                 ],
               ),
@@ -392,7 +394,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
               child: const Text('🥛', style: TextStyle(fontSize: 24)),
             ),
-            title: const Text('Active Subscription', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: Text('Active Subscription', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade900)),
             subtitle: Text(
               '${sub.monthlyLiters}L / month • ${sub.skipWeekends ? 'Weekdays' : 'Daily'}',
               style: TextStyle(color: Colors.green.shade700),
@@ -402,7 +404,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))),
+      loading: () => const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3))))),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -562,7 +564,7 @@ class DashboardScreen extends ConsumerWidget {
           }).toList(),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3))),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

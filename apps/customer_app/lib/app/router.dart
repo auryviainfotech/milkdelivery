@@ -6,7 +6,7 @@ import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/signup_screen.dart';
 import '../features/auth/screens/complete_profile_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
-import '../features/wallet/screens/wallet_screen.dart';
+import '../features/wallet/screens/wallet_screen.dart' show LitersQuotaScreen;
 import '../features/subscription/screens/subscription_list_screen.dart';
 import '../features/subscription/screens/subscription_detail_screen.dart';
 import '../features/subscription/screens/order_success_screen.dart';
@@ -85,7 +85,7 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/wallet',
       name: 'wallet',
-      builder: (context, state) => const WalletScreen(),
+      builder: (context, state) => const LitersQuotaScreen(),
     ),
     GoRoute(
       path: '/subscriptions',

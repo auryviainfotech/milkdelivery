@@ -24,11 +24,14 @@ enum DeliveryStatus {
 class OrderModel with _$OrderModel {
   const factory OrderModel({
     required String id,
-    required String userId,
-    String? subscriptionId,
-    required DateTime deliveryDate,
+    @JsonKey(name: 'user_id') required String userId,
+    @JsonKey(name: 'subscription_id') String? subscriptionId,
+    @JsonKey(name: 'delivery_date') required DateTime deliveryDate,
     @Default(OrderStatus.pending) OrderStatus status,
-    DateTime? createdAt,
+    @JsonKey(name: 'created_at') DateTime? createdAt,
+    @JsonKey(name: 'payment_method') String? paymentMethod,
+    @JsonKey(name: 'total_amount') double? totalAmount,
+    @JsonKey(name: 'order_type') String? orderType,
   }) = _OrderModel;
 
   factory OrderModel.fromJson(Map<String, dynamic> json) =>
@@ -40,8 +43,8 @@ class OrderModel with _$OrderModel {
 class OrderItem with _$OrderItem {
   const factory OrderItem({
     required String id,
-    required String orderId,
-    required String productId,
+    @JsonKey(name: 'order_id') required String orderId,
+    @JsonKey(name: 'product_id') required String productId,
     required int quantity,
     required double price,
   }) = _OrderItem;
@@ -55,14 +58,14 @@ class OrderItem with _$OrderItem {
 class DeliveryModel with _$DeliveryModel {
   const factory DeliveryModel({
     required String id,
-    required String orderId,
-    required String deliveryPersonId,
-    required DateTime scheduledDate,
-    DateTime? deliveredAt,
-    @Default(false) bool qrScanned,
+    @JsonKey(name: 'order_id') required String orderId,
+    @JsonKey(name: 'delivery_person_id') required String deliveryPersonId,
+    @JsonKey(name: 'scheduled_date') required DateTime scheduledDate,
+    @JsonKey(name: 'delivered_at') DateTime? deliveredAt,
+    @Default(false) @JsonKey(name: 'qr_scanned') bool qrScanned,
     @Default(DeliveryStatus.pending) DeliveryStatus status,
-    String? issueNotes,
-    DateTime? createdAt,
+    @JsonKey(name: 'issue_notes') String? issueNotes,
+    @JsonKey(name: 'created_at') DateTime? createdAt,
   }) = _DeliveryModel;
 
   factory DeliveryModel.fromJson(Map<String, dynamic> json) =>

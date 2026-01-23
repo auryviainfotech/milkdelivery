@@ -141,15 +141,36 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       final customerName = profile['full_name'] ?? 'Customer';
       
       if (currentLiters < liters) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$customerName only has ${currentLiters.toStringAsFixed(1)} liters remaining!'),
-              backgroundColor: Colors.orange,
+        if (!mounted) return;
+        
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Insufficient Balance'),
+            content: Text(
+              '$customerName only has ${currentLiters.toStringAsFixed(1)}L remaining.\n'
+              'You are trying to deliver $liters L.\n\n'
+              'Proceed with negative balance (Overdraft)?'
             ),
-          );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                child: const Text('Allow Overdraft'),
+              ),
+            ],
+          ),
+        );
+        
+        if (proceed != true) {
+          setState(() => _isScanned = false);
+          _controller?.start();
+          return;
         }
-        // Still allow delivery but show warning
       }
 
       // Deduct liters from customer's quota
@@ -176,6 +197,41 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           .from('orders')
           .update({'status': 'delivered'})
           .eq('id', widget.orderId);
+
+      // Get product name from order for notification
+      String productName = 'Milk';
+      try {
+        final orderData = await SupabaseService.client
+            .from('orders')
+            .select('subscription_id, subscriptions!orders_subscription_id_fkey(product_id, products!subscriptions_product_id_fkey(name))')
+            .eq('id', widget.orderId)
+            .maybeSingle();
+        
+        if (orderData != null) {
+          final subscription = orderData['subscriptions'] as Map<String, dynamic>?;
+          final product = subscription?['products'] as Map<String, dynamic>?;
+          productName = product?['name'] ?? 'Milk';
+        }
+      } catch (_) {
+        // Fallback to 'Milk' if product fetch fails
+      }
+
+      // Calculate new liters remaining
+      final newLitersRemaining = currentLiters - liters;
+
+      // Send notification to customer
+      await SupabaseService.client.from('notifications').insert({
+        'user_id': _scannedCustomerId,
+        'title': '🥛 Delivery Complete!',
+        'body': '$productName (${liters.toStringAsFixed(1)}L) delivered. You have ${newLitersRemaining.toStringAsFixed(1)}L remaining.',
+        'type': 'deliveryUpdate',
+        'data': {
+          'order_id': widget.orderId,
+          'liters_delivered': liters,
+          'liters_remaining': newLitersRemaining,
+          'product_name': productName,
+        },
+      });
 
       if (mounted) {
         context.go('/routes');

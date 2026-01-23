@@ -10,8 +10,6 @@ final reportDataProvider = FutureProvider.family<Map<String, dynamic>, String>((
   switch (reportType) {
     case 'daily':
       return await _fetchDailyReport();
-    case 'revenue':
-      return await _fetchRevenueReport();
     case 'subscription':
       return await _fetchSubscriptionReport();
     case 'delivery':
@@ -35,50 +33,21 @@ Future<Map<String, dynamic>> _fetchDailyReport() async {
   final pending = (deliveries as List).where((d) => d['status'] == 'pending').length;
   final issues = (deliveries as List).where((d) => d['status'] == 'issue').length;
   
-  final todaySubscriptions = await SupabaseService.client
-      .from('subscriptions')
-      .select('total_amount')
-      .gte('created_at', '${today}T00:00:00')
-      .lte('created_at', '${today}T23:59:59');
-  
-  final todayRevenue = (todaySubscriptions as List)
-      .fold<double>(0, (sum, s) => sum + ((s['total_amount'] as num?)?.toDouble() ?? 0));
-  
   final newCustomers = await SupabaseService.client
       .from('profiles')
       .select('id')
       .eq('role', 'customer')
       .gte('created_at', '${today}T00:00:00');
   
-  final walletRecharges = await SupabaseService.client
-      .from('wallet_transactions')
-      .select('amount')
-      .eq('type', 'credit')
-      .gte('created_at', '${today}T00:00:00');
-  
-  final totalRecharges = (walletRecharges as List)
-      .fold<double>(0, (sum, t) => sum + ((t['amount'] as num?)?.toDouble() ?? 0));
-  
   return {
     'delivered': delivered,
     'pending': pending,
     'issues': issues,
-    'revenue': todayRevenue,
     'newCustomers': (newCustomers as List).length,
-    'walletRecharges': totalRecharges,
   };
 }
 
-Future<Map<String, dynamic>> _fetchRevenueReport() async {
-  final subscriptions = await SupabaseService.client
-      .from('subscriptions')
-      .select('total_amount, created_at');
-  
-  final totalRevenue = (subscriptions as List)
-      .fold<double>(0, (sum, s) => sum + ((s['total_amount'] as num?)?.toDouble() ?? 0));
-  
-  return {'totalRevenue': totalRevenue, 'subscriptions': subscriptions};
-}
+
 
 Future<Map<String, dynamic>> _fetchSubscriptionReport() async {
   final subscriptions = await SupabaseService.client
@@ -131,13 +100,6 @@ Future<Map<String, dynamic>> _fetchCustomerReport() async {
     return created.month == thisMonth && created.year == thisYear;
   }).length;
   
-  final wallets = await SupabaseService.client
-      .from('wallets')
-      .select('balance');
-  
-  final avgBalance = (wallets as List).isEmpty ? 0 :
-      (wallets as List).fold<double>(0, (sum, w) => sum + ((w['balance'] as num?)?.toDouble() ?? 0)) / (wallets as List).length;
-  
   final activeCustomers = await SupabaseService.client
       .from('subscriptions')
       .select('user_id')
@@ -147,7 +109,6 @@ Future<Map<String, dynamic>> _fetchCustomerReport() async {
     'total': total,
     'active': (activeCustomers as List).toSet().length,
     'newThisMonth': newThisMonth,
-    'avgBalance': avgBalance.toStringAsFixed(0),
   };
 }
 
@@ -206,8 +167,6 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               child: Row(
                 children: [
                   _buildReportTab('Daily Summary', 'daily', Icons.today),
-                  const SizedBox(width: 12),
-                  _buildReportTab('Revenue Report', 'revenue', Icons.currency_rupee),
                   const SizedBox(width: 12),
                   _buildReportTab('Subscription Report', 'subscription', Icons.subscriptions),
                   const SizedBox(width: 12),
@@ -279,8 +238,6 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     switch (_selectedReport) {
       case 'daily':
         return _buildDailySummary(data);
-      case 'revenue':
-        return _buildRevenueReport(data);
       case 'subscription':
         return _buildSubscriptionReport(data);
       case 'delivery':
@@ -309,9 +266,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               _buildMetricCard('Orders Delivered', '${data['delivered'] ?? 0}', Icons.check_circle, AppTheme.successColor),
               _buildMetricCard('Pending Orders', '${data['pending'] ?? 0}', Icons.pending, AppTheme.warningColor),
               _buildMetricCard('Failed Deliveries', '${data['issues'] ?? 0}', Icons.error, AppTheme.errorColor),
-              _buildMetricCard('Revenue', '₹${(data['revenue'] ?? 0).toStringAsFixed(0)}', Icons.currency_rupee, Colors.purple),
               _buildMetricCard('New Customers', '${data['newCustomers'] ?? 0}', Icons.person_add, Colors.blue),
-              _buildMetricCard('Wallet Recharges', '₹${(data['walletRecharges'] ?? 0).toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.orange),
             ],
           ),
         ],
@@ -319,29 +274,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
-  Widget _buildRevenueReport(Map<String, dynamic> data) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Revenue Report', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 24),
-        Expanded(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bar_chart, size: 64, color: Theme.of(context).colorScheme.primary.withOpacity(0.5)),
-                const SizedBox(height: 16),
-                Text('Total Revenue from Subscriptions', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                const SizedBox(height: 8),
-                Text('₹${(data['totalRevenue'] ?? 0).toStringAsFixed(2)}', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildSubscriptionReport(Map<String, dynamic> data) {
     return Column(
@@ -396,7 +329,6 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             _buildMetricCard('Total Customers', '${data['total'] ?? 0}', Icons.people, Colors.blue),
             _buildMetricCard('Active', '${data['active'] ?? 0}', Icons.person, AppTheme.successColor),
             _buildMetricCard('New This Month', '${data['newThisMonth'] ?? 0}', Icons.person_add, Colors.orange),
-            _buildMetricCard('Avg Wallet Balance', '₹${data['avgBalance'] ?? 0}', Icons.account_balance_wallet, Colors.purple),
           ],
         ),
       ],

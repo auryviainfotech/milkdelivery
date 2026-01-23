@@ -164,11 +164,11 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                   size: 240,
                   backgroundColor: Colors.white,
                   eyeStyle: QrEyeStyle(
-                    eyeShape: QrEyeShape.roundedRect,
+                    eyeShape: QrEyeShape.square,
                     color: colorScheme.primary,
                   ),
                   dataModuleStyle: QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.roundedRect,
+                    dataModuleShape: QrDataModuleShape.square,
                     color: Colors.black87,
                   ),
                   errorStateBuilder: (ctx, err) => const Center(

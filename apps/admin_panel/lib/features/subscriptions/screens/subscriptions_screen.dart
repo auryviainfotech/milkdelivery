@@ -167,9 +167,6 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _buildStatusChip(isPaused ? 'paused' : (sub['status'] ?? 'active')),
-                            const SizedBox(width: 8),
-                            Text('₹${(sub['total_amount'] ?? 0).toStringAsFixed(0)}', 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           ],
                         ),
                         onTap: () => _viewDetails(sub, profile),
@@ -248,7 +245,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(profile?['full_name'] ?? 'Subscription Details'),
         content: SizedBox(
           width: 400,
@@ -321,7 +318,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
-                            onPressed: () => _activateSubscription(sub['id'], sub['user_id'], litersController.text),
+                            onPressed: () => _activateSubscription(dialogContext, sub['id'], sub['user_id'], litersController.text),
                             icon: const Icon(Icons.check),
                             label: const Text('Activate & Add Liters'),
                             style: FilledButton.styleFrom(backgroundColor: Colors.green),
@@ -337,7 +334,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
           ),
         ],
@@ -345,7 +342,7 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
     );
   }
   
-  Future<void> _activateSubscription(String subscriptionId, String userId, String litersText) async {
+  Future<void> _activateSubscription(BuildContext dialogContext, String subscriptionId, String userId, String litersText) async {
     final liters = double.tryParse(litersText) ?? 0;
     if (liters <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -370,8 +367,13 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
           })
           .eq('id', userId);
       
+      // Close dialog first
+      if (dialogContext.mounted) {
+        Navigator.pop(dialogContext);
+      }
+      
+      // Then show snackbar and refresh using parent context
       if (mounted) {
-        Navigator.pop(context);
         ref.invalidate(subscriptionsProvider);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -433,11 +435,12 @@ class _GenerateOrdersDialogState extends State<_GenerateOrdersDialog> {
   bool _isProcessing = false;
   Map<String, int>? _result;
   String? _error;
+  bool _generateForToday = false; // Default to Tomorrow to avoid accidental double-billing in production
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_result != null ? 'Orders Generated!' : 'Generate Tomorrow\'s Orders'),
+      title: Text(_result != null ? 'Orders Generated!' : 'Generate Orders'),
       content: _buildContent(),
       actions: _buildActions(),
     );
@@ -476,13 +479,63 @@ class _GenerateOrdersDialogState extends State<_GenerateOrdersDialog> {
           _buildResultRow(Icons.local_shipping, 'Deliveries Assigned', _result!['deliveries_assigned'] ?? 0),
           if ((_result!['unassigned'] ?? 0) > 0)
             _buildResultRow(Icons.warning_amber, 'Unassigned (no matching delivery person)', _result!['unassigned'] ?? 0, isWarning: true),
+          if ((_result!['failed'] ?? 0) > 0)
+            _buildResultRow(Icons.error_outline, 'Skipped (Likely deleted products)', _result!['failed'] ?? 0, isWarning: true),
         ],
       );
     }
 
-    return const Text(
-      'This will create delivery orders for all active subscriptions for tomorrow.\n\n'
-      'Orders will be automatically assigned to delivery persons based on PIN code matching.',
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'This will create delivery orders for all active subscriptions.\n'
+          'Existing orders for the selected date will be skipped.',
+        ),
+        const SizedBox(height: 16),
+        const Text('Target Date:', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: RadioListTile<bool>(
+                title: const Text('Tomorrow'),
+                subtitle: Text(DateFormat('MMM dd').format(DateTime.now().add(const Duration(days: 1)))),
+                value: false,
+                groupValue: _generateForToday,
+                onChanged: (v) => setState(() => _generateForToday = v!),
+              ),
+            ),
+            Expanded(
+              child: RadioListTile<bool>(
+                title: const Text('Today'),
+                subtitle: Text(DateFormat('MMM dd').format(DateTime.now())),
+                value: true,
+                groupValue: _generateForToday,
+                onChanged: (v) => setState(() => _generateForToday = v!),
+              ),
+            ),
+          ],
+        ),
+        if (_generateForToday)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning_amber, size: 16, color: Colors.orange),
+                SizedBox(width: 8),
+                Expanded(child: Text('Only use "Today" for testing or if cron job failed.', style: TextStyle(fontSize: 12, color: Colors.orange))),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -520,7 +573,7 @@ class _GenerateOrdersDialogState extends State<_GenerateOrdersDialog> {
       ),
       FilledButton(
         onPressed: _isProcessing ? null : _generate,
-        child: const Text('Generate'),
+        child: Text(_generateForToday ? 'Generate for TODAY' : 'Generate for TOMORROW'),
       ),
     ];
   }
@@ -532,8 +585,8 @@ class _GenerateOrdersDialogState extends State<_GenerateOrdersDialog> {
     });
 
     try {
-      final tomorrow = DateTime.now().add(const Duration(days: 1));
-      final result = await OrderGenerationService.generateOrdersForDate(tomorrow);
+      final targetDate = _generateForToday ? DateTime.now() : DateTime.now().add(const Duration(days: 1));
+      final result = await OrderGenerationService.generateOrdersForDate(targetDate);
       
       if (mounted) {
         setState(() {
