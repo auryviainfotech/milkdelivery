@@ -63,37 +63,10 @@ class _OtpScreenState extends State<OtpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      print('Verifying OTP: $_otp for phone: ${widget.phoneNumber}'); // Debug log
-      
-      // TEST BYPASS: Accept 123456 for test phone number
-      if (widget.phoneNumber == '+919876543210' && _otp == '123456') {
-        print('TEST MODE: Bypassing Supabase OTP verification');
-        if (mounted) {
-          setState(() => _isLoading = false);
-          // In test mode, we just check if any user is logged in
-          final userId = SupabaseService.currentUser?.id;
-          if (userId != null) {
-            final exists = await UserRepository.profileExists(userId);
-            if (mounted) {
-              if (exists) {
-                context.go('/dashboard');
-              } else {
-                context.go('/complete-profile');
-              }
-            }
-          } else {
-            // For pure testing with no supabase session, just go to dashboard
-            context.go('/dashboard');
-          }
-        }
-        return;
-      }
-      
       await SupabaseService.verifyOTP(
         phone: widget.phoneNumber,
         token: _otp,
       );
-      print('OTP verified successfully'); // Debug log
 
       if (mounted) {
         setState(() => _isLoading = false);
@@ -112,7 +85,6 @@ class _OtpScreenState extends State<OtpScreen> {
         }
       }
     } catch (e) {
-      print('OTP verification error: $e'); // Debug log
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(

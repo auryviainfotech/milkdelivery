@@ -541,7 +541,7 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
                                       '${p.street}, ${p.subLocality}, ${p.locality}, ${p.postalCode}';
                                 }
                               } catch (e) {
-                                debugPrint('Location error: $e');
+                                // Location fetch failed - ignore
                               }
                               setDialogState(() => isFetchingLocation = false);
                             },

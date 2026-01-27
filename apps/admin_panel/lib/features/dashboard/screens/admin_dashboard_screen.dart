@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 
 /// Provider for dashboard stats
@@ -234,24 +235,28 @@ class AdminDashboardScreen extends ConsumerWidget {
                   icon: Icons.person_add,
                   label: 'Add Customer',
                   color: Colors.blue,
+                  route: '/customers',
                 ),
                 _buildQuickAction(
                   context,
                   icon: Icons.subscriptions,
                   label: 'View Subscriptions',
                   color: Colors.green,
+                  route: '/subscriptions',
                 ),
                 _buildQuickAction(
                   context,
                   icon: Icons.local_shipping,
-                  label: 'Generate Orders',
+                  label: 'View Deliveries',
                   color: Colors.orange,
+                  route: '/deliveries',
                 ),
                 _buildQuickAction(
                   context,
                   icon: Icons.bar_chart,
                   label: 'View Reports',
                   color: Colors.purple,
+                  route: '/reports',
                 ),
               ],
             ),
@@ -266,9 +271,10 @@ class AdminDashboardScreen extends ConsumerWidget {
     required IconData icon,
     required String label,
     required Color color,
+    required String route,
   }) {
     return InkWell(
-      onTap: () {},
+      onTap: () => context.go(route),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),

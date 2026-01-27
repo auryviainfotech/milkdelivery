@@ -5,6 +5,7 @@ import 'package:data_table_2/data_table_2.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../shared/config/app_config.dart';
 
 /// Provider for products from Supabase
 final productsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
@@ -274,8 +275,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
           );
       return SupabaseService.client.storage.from('products').getPublicUrl(path);
     } catch (e) {
-      debugPrint('Upload error: $e');
-      // If bucket doesn't exist, this will fail. Ideally handle this gracefully.
+      // If bucket doesn't exist, this will fail
       rethrow;
     }
   }
@@ -285,7 +285,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
     final nameController = TextEditingController(text: product?['name'] ?? '');
     final descController = TextEditingController(text: product?['description'] ?? '');
     final priceController = TextEditingController(text: product?['price']?.toString() ?? '');
-    final unitController = TextEditingController(text: product?['unit'] ?? '500ml');
+    final unitController = TextEditingController(text: product?['unit'] ?? AppConfig.defaultProductUnit);
     String selectedEmoji = product?['emoji'] ?? '🥛';
     String selectedCategory = product?['category'] ?? 'subscription';
     Uint8List? selectedImageBytes;
@@ -462,10 +462,10 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                           child: TextField(
                             controller: priceController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Price (₹) *',
-                              border: OutlineInputBorder(),
-                              hintText: '26',
+                              border: const OutlineInputBorder(),
+                              hintText: AppConfig.defaultPriceHint,
                             ),
                           ),
                         ),
@@ -476,7 +476,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                             decoration: InputDecoration(
                               labelText: 'Unit/Pack Size',
                               border: const OutlineInputBorder(),
-                              hintText: '500ml',
+                              hintText: AppConfig.defaultProductUnit,
                             ),
                           ),
                         ),
@@ -540,7 +540,7 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       'name': nameController.text.trim(),
                       'description': descController.text.trim(),
                       'price': price,
-                      'unit': unitController.text.trim().isEmpty ? '500ml' : unitController.text.trim(),
+                      'unit': unitController.text.trim().isEmpty ? AppConfig.defaultProductUnit : unitController.text.trim(),
                       'emoji': selectedEmoji,
                       'category': selectedCategory,
                       'image_url': imageUrl,
@@ -574,7 +574,6 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                       isLoading = false;
                       errorMessage = 'Error: ${e.toString()}';
                     });
-                    debugPrint('Product save error: $e');
                   }
                 },
                 child: isLoading 

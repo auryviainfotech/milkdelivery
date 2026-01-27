@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../dashboard/screens/delivery_dashboard_screen.dart';
 
 /// Provider to fetch delivery details using Delivery ID
 final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, deliveryId) async {
   try {
     // Fetch delivery with order, customer profile, and subscription details
-    // Matches the structure used in dashboard
     final response = await SupabaseService.client
         .from('deliveries')
         .select('''
@@ -34,8 +34,6 @@ final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, Stri
     
     return response;
   } catch (e, stack) {
-    debugPrint('Error fetching delivery details: $e');
-    debugPrint('Stack: $stack');
     return null;
   }
 });
@@ -73,7 +71,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
           final customerName = customer?['full_name'] ?? 'Customer';
           final address = customer?['address'] ?? 'Address not available';
           final phone = customer?['phone'] ?? '';
-          
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -99,7 +97,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 16),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,31 +105,30 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                                   Text(
                                     customerName,
                                     style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.bold,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                   ),
+                                  const SizedBox(height: 4),
                                   Text(
                                     address,
-                                    style: TextStyle(
+                                    style: theme.textTheme.bodyMedium?.copyWith(
                                       color: colorScheme.onSurfaceVariant,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
                                   ),
-                                  if (phone.isNotEmpty)
-                                    Text(
-                                      phone,
-                                      style: TextStyle(
-                                        color: colorScheme.primary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        const Divider(height: 24),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 16),
                         Text(
-                          'Order Details',
+                          'Delivery Details',
                           style: theme.textTheme.titleSmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -148,11 +145,6 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                             color: colorScheme.onSurfaceVariant,
                             fontSize: 12,
                           ),
-                        ),
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -286,19 +278,22 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                         .update({'status': 'issue'})
                         .eq('id', delivery['id']);
                   } catch (e) {
-                    print('Error reporting issue: $e');
+                    // Error handled silently
                   }
-                  Navigator.pop(context);
-                  context.pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Issue reported successfully'),
-                      backgroundColor: AppTheme.warningColor,
-                    ),
-                  );
+                  
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    context.pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Issue reported successfully'),
+                        backgroundColor: AppTheme.warningColor,
+                      ),
+                    );
+                  }
                 },
                 style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
+                  backgroundColor: theme.colorScheme.error,
                 ),
                 child: const Text('Submit Issue'),
               ),
@@ -315,8 +310,42 @@ class DeliveryConfirmScreen extends ConsumerWidget {
       child: ListTile(
         title: Text(text),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          // Select this issue
+        onTap: () async {
+          // Report this specific issue
+          try {
+            await SupabaseService.client
+                .from('orders')
+                .update({'status': 'failed'})
+                .eq('id', delivery['order_id']);
+            
+            await SupabaseService.client
+                .from('deliveries')
+                .update({
+                  'status': 'issue',
+                  'issue_notes': text,
+                })
+                .eq('id', delivery['id']);
+            
+            if (context.mounted) {
+              Navigator.pop(context);
+              context.pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Issue reported: $text'),
+                  backgroundColor: AppTheme.warningColor,
+                ),
+              );
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
         },
       ),
     );
@@ -355,7 +384,6 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                     .eq('id', delivery['id']);
                 
                 // Invalidate providers to refresh dashboard data
-                // Cast to String to ensure type safety
                 final String orderId = delivery['order_id'] as String;
                 ref.invalidate(todayDeliveriesProvider);
                 ref.invalidate(deliveryDetailProvider(orderId));
@@ -391,4 +419,46 @@ class DeliveryConfirmScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildProductInfo(ColorScheme colorScheme, Map<String, dynamic>? order) {
+    if (order == null) return const SizedBox.shrink();
+    
+    final subscription = order['subscriptions'] as Map<String, dynamic>?;
+    final product = subscription?['products'] as Map<String, dynamic>?;
+    
+    final productName = product?['name'] ?? 'Milk';
+    final unit = product?['unit'] ?? 'L';
+    final quantity = subscription?['quantity'] ?? 1;
+    final deliverySlot = subscription?['delivery_slot'] ?? 'morning';
+    
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.secondaryContainer.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(Icons.inventory_2_outlined, color: colorScheme.secondary, size: 24),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$quantity $unit $productName',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              Text(
+                '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

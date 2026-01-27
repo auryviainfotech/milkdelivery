@@ -12,11 +12,12 @@ class DeliveryLoginScreen extends ConsumerStatefulWidget {
   const DeliveryLoginScreen({super.key});
 
   @override
-  ConsumerState<DeliveryLoginScreen> createState() => _DeliveryLoginScreenState();
+  ConsumerState<DeliveryLoginScreen> createState() =>
+      _DeliveryLoginScreenState();
 }
 
 class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
-  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
@@ -24,7 +25,7 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -35,16 +36,11 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final rawPhone = _phoneController.text.trim();
-      final phone = '+91$rawPhone';
+      final email = _emailController.text.trim().toLowerCase();
       final password = _passwordController.text;
-      final authEmail = 'delivery_$rawPhone@milkdelivery.local';
-      
-      debugPrint('=== LOGIN ATTEMPT ===');
-      debugPrint('Phone: $phone');
-      
+
       final authResponse = await SupabaseService.client.auth.signInWithPassword(
-        email: authEmail,
+        email: email,
         password: password,
       );
 
@@ -59,8 +55,6 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
           .eq('id', user.id)
           .maybeSingle();
 
-      debugPrint('Response: $response');
-
       if (response == null) {
         await SupabaseService.client.auth.signOut();
         throw Exception('Delivery account not linked');
@@ -71,15 +65,12 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
         await SupabaseService.client.auth.signOut();
         throw Exception('Access denied');
       }
-      
-      debugPrint('Found profile: ${response['full_name']}, ID: ${response['id']}');
 
       // Store the profile ID for later use
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('delivery_person_id', user.id);
-      await prefs.setString('delivery_person_name', response['full_name'] ?? 'Delivery Person');
-      
-      debugPrint('Stored delivery_person_id: ${response['id']}');
+      await prefs.setString(
+          'delivery_person_name', response['full_name'] ?? 'Delivery Person');
 
       // Force refresh of providers to load new user data
       ref.invalidate(deliveryPersonIdProvider);
@@ -162,45 +153,27 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
                 ),
                 const SizedBox(height: 48),
 
-                // Phone number input
+                // Email input
                 Text(
-                  'Mobile Number',
+                  'Email',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(10),
-                  ],
-                  decoration: InputDecoration(
-                    hintText: '9876543210',
-                    prefixIcon: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('🇮🇳 +91', style: theme.textTheme.bodyLarge),
-                          const SizedBox(width: 8),
-                          Container(
-                            width: 1,
-                            height: 24,
-                            color: colorScheme.outline,
-                          ),
-                        ],
-                      ),
-                    ),
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    hintText: 'delivery@example.com',
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your phone number';
+                      return 'Please enter your email';
                     }
-                    if (value.length != 10) {
-                      return 'Phone number must be 10 digits';
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
@@ -223,7 +196,9 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);

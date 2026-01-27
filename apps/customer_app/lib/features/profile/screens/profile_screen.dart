@@ -283,35 +283,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             // Stats cards
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      context,
-                      icon: Icons.local_shipping,
-                      value: '0',
-                      label: 'Deliveries',
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final statsAsync = ref.watch(userProfileStatsProvider);
+                  return statsAsync.when(
+                    loading: () => Row(
+                      children: [
+                        Expanded(child: _buildStatCard(context, icon: Icons.local_shipping, value: '...', label: 'Deliveries')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildStatCard(context, icon: Icons.calendar_month, value: '...', label: 'Months')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildStatCard(context, icon: Icons.savings, value: '...', label: 'Saved')),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildStatCard(
-                      context,
-                      icon: Icons.calendar_month,
-                      value: '0',
-                      label: 'Months',
+                    error: (_, __) => Row(
+                      children: [
+                        Expanded(child: _buildStatCard(context, icon: Icons.local_shipping, value: '0', label: 'Deliveries')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildStatCard(context, icon: Icons.calendar_month, value: '0', label: 'Months')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildStatCard(context, icon: Icons.savings, value: '₹0', label: 'Saved')),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildStatCard(
-                      context,
-                      icon: Icons.savings,
-                      value: '₹0',
-                      label: 'Saved',
+                    data: (stats) => Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            context,
+                            icon: Icons.local_shipping,
+                            value: '${stats['deliveries'] ?? 0}',
+                            label: 'Deliveries',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            context,
+                            icon: Icons.calendar_month,
+                            value: '${stats['months'] ?? 0}',
+                            label: 'Months',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            context,
+                            icon: Icons.savings,
+                            value: '₹${((stats['savings'] ?? 0.0) as double).toStringAsFixed(0)}',
+                            label: 'Saved',
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 24),

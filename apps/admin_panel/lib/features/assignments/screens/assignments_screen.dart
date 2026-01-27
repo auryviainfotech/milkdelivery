@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:milk_core/milk_core.dart';
+import '../../../shared/config/app_config.dart';
 
 /// Provider for customers with active subscriptions only
 final customersProvider =
@@ -72,7 +73,7 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
   String _filterStatus = 'all'; // 'all', 'assigned', 'unassigned'
   String _searchQuery = '';
 
-  static const int maxCapacity = 20;
+  int get maxCapacity => AppConfig.maxCustomersPerDeliveryPerson;
 
   @override
   Widget build(BuildContext context) {

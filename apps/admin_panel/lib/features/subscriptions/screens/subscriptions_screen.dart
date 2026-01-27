@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:milk_core/milk_core.dart';
 import 'package:intl/intl.dart';
+import '../../../shared/config/app_config.dart';
 
 /// Provider for subscriptions with customer info
 final subscriptionsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
@@ -61,14 +62,14 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.access_time, size: 16, color: AppTheme.warningColor),
-                      SizedBox(width: 8),
+                      const Icon(Icons.access_time, size: 16, color: AppTheme.warningColor),
+                      const SizedBox(width: 8),
                       Text(
-                        'Cutoff: 10:00 PM',
-                        style: TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w500),
+                        'Cutoff: ${AppConfig.orderCutoffDisplay}',
+                        style: const TextStyle(color: AppTheme.warningColor, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),

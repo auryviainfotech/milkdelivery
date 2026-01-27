@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../shared/config/app_config.dart';
 
 /// Provider for delivery persons list
 final deliveryPersonsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
@@ -263,6 +264,7 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
 
   Future<void> _showAddDialog(BuildContext context) async {
     final nameController = TextEditingController();
+    final emailController = TextEditingController();
     final phoneController = TextEditingController();
     final passwordController = TextEditingController();
     bool isLoading = false;
@@ -292,7 +294,7 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Phone Number',
                     prefixIcon: Icon(Icons.phone_outlined),
-                    prefixText: '+91 ',
+                    prefixText: '${AppConfig.phoneCountryCode} ',
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.phone,
@@ -300,6 +302,17 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(10),
                   ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                    helperText: 'Delivery person will use this email to login',
+                  ),
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -324,6 +337,8 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                   ? null
                   : () async {
                       if (nameController.text.isEmpty ||
+                          emailController.text.isEmpty ||
+                          !emailController.text.contains('@') ||
                           phoneController.text.length != 10 ||
                           passwordController.text.length < 6) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -336,8 +351,8 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
 
                       try {
                         final rawPhone = phoneController.text.trim();
-                        final formattedPhone = '+91$rawPhone';
-                        final authEmail = 'delivery_$rawPhone@milkdelivery.local';
+                        final formattedPhone = '${AppConfig.phoneCountryCode}$rawPhone';
+                        final authEmail = emailController.text.trim().toLowerCase();
                         final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
                         final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
                         final localStorage = SharedPreferencesLocalStorage(
@@ -371,17 +386,13 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                         }
 
                         // Use ADMIN client to insert profile (RLS allows admin to insert)
-                        debugPrint('=== CREATING DELIVERY PERSON ===');
-                        debugPrint('Auth User ID: $newUserId');
-                        debugPrint('Email: $authEmail');
-                        debugPrint('Phone: $formattedPhone');
-                        
                         await SupabaseService.client.from('profiles').insert({
                           'id': newUserId,
                           'full_name': nameController.text.trim(),
                           'phone': formattedPhone,
+                          'email': authEmail,
                           'role': 'delivery',
-                          'address': passwordController.text,
+                          'address': '',
                           'created_at': DateTime.now().toIso8601String(),
                         });
                         
@@ -395,11 +406,6 @@ class _DeliveryPersonsScreenState extends ConsumerState<DeliveryPersonsScreen> {
                         if (verifyProfile == null) {
                           throw Exception('Profile creation failed - profile not found after insert. Auth user was created but profile was not.');
                         }
-                        
-                        debugPrint('Profile verified: ${verifyProfile['full_name']} (${verifyProfile['role']})');
-                        debugPrint('=== DELIVERY PERSON CREATED SUCCESSFULLY ===');
-                        
-                        // Dispose temp client if possible, or just let garbage collector handle it
 
                         if (context.mounted) {
                           Navigator.pop(context);

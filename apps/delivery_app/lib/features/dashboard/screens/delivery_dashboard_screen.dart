@@ -8,21 +8,21 @@ import 'package:url_launcher/url_launcher.dart';
 /// Provider for current delivery person's ID from SharedPreferences
 final deliveryPersonIdProvider = FutureProvider<String?>((ref) async {
   final prefs = await SharedPreferences.getInstance();
-  debugPrint('Using SharedPreferences keys: ${prefs.getKeys()}');
   return prefs.getString('delivery_person_id');
 });
 
 /// Provider for current delivery person's profile
-final deliveryProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+final deliveryProfileProvider =
+    FutureProvider<Map<String, dynamic>?>((ref) async {
   final personId = await ref.watch(deliveryPersonIdProvider.future);
   if (personId == null) return null;
-  
+
   final response = await SupabaseService.client
       .from('profiles')
       .select()
       .eq('id', personId)
       .maybeSingle();
-  
+
   return response;
 });
 
@@ -41,86 +41,90 @@ String _normalizeDateValue(dynamic value) {
   return text;
 }
 
+/// Fetch deliveries with all related data
 Future<List<Map<String, dynamic>>> _fetchDeliveriesForDate(
   String personId,
   String dateStr,
 ) async {
-  debugPrint('Fetching deliveries for $dateStr');
-  final simpleResult = await SupabaseService.client
-      .from('deliveries')
-      .select('id, order_id, scheduled_date, status, delivery_person_id')
-      .eq('delivery_person_id', personId)
-      .eq('scheduled_date', dateStr);
-
-  debugPrint('Simple query found: ${simpleResult.length} deliveries');
-
-  if (simpleResult.isEmpty) {
-    return [];
-  }
-
   try {
-    final fullResult = await SupabaseService.client
+    // First, get deliveries
+    final deliveries = await SupabaseService.client
         .from('deliveries')
-        .select('''
-          *,
-          orders (
-            id,
-            user_id,
-            subscription_id,
-            subscriptions (
-              delivery_slot,
-              product_id,
-              quantity,
-              products (name, unit, image_url)
-            ),
-            profiles (full_name, phone, address)
-          )
-        ''')
+        .select('*')
         .eq('delivery_person_id', personId)
         .eq('scheduled_date', dateStr)
         .order('created_at');
 
-    debugPrint('JOIN query found: ${fullResult.length} deliveries');
+    if (deliveries.isEmpty) return [];
 
-    if (fullResult.isNotEmpty) {
-      final deliveries = List<Map<String, dynamic>>.from(fullResult);
-      deliveries.sort((a, b) {
-        final slotA = a['orders']?['subscriptions']?['delivery_slot'] ?? 'morning';
-        final slotB = b['orders']?['subscriptions']?['delivery_slot'] ?? 'morning';
-        return slotA.compareTo(slotB);
-      });
-      return deliveries;
+    // Get unique order IDs
+    final orderIds = deliveries
+        .map((d) => d['order_id'] as String?)
+        .where((id) => id != null)
+        .toSet()
+        .toList();
+    
+    if (orderIds.isEmpty) {
+      return List<Map<String, dynamic>>.from(deliveries);
     }
-  } catch (joinError) {
-    debugPrint('JOIN query failed: $joinError');
-  }
 
-  debugPrint('Using simple result as fallback');
-  return List<Map<String, dynamic>>.from(simpleResult);
+    // Fetch orders with nested profiles and subscriptions
+    // Use !fk_name syntax for explicit foreign key reference
+    final orders = await SupabaseService.client
+        .from('orders')
+        .select('''
+          *,
+          profiles!orders_user_id_fkey (full_name, phone, address),
+          subscriptions (
+            id, product_id, delivery_slot, quantity,
+            products (id, name, unit, image_url)
+          )
+        ''')
+        .inFilter('id', orderIds);
+
+    // Create a map for quick lookup
+    final ordersMap = <String, Map<String, dynamic>>{};
+    for (final order in orders) {
+      ordersMap[order['id'] as String] = Map<String, dynamic>.from(order);
+    }
+
+    // Merge orders into deliveries
+    final result = <Map<String, dynamic>>[];
+    for (final delivery in deliveries) {
+      final merged = Map<String, dynamic>.from(delivery);
+      final orderId = delivery['order_id'] as String?;
+      if (orderId != null && ordersMap.containsKey(orderId)) {
+        merged['orders'] = ordersMap[orderId];
+      }
+      result.add(merged);
+    }
+
+    return result;
+    
+  } catch (e, stack) {
+    return [];
+  }
 }
 
 /// Provider for today's deliveries assigned to this delivery person
-final todayDeliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final todayDeliveriesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final personId = await ref.watch(deliveryPersonIdProvider.future);
-  debugPrint('=== DELIVERY FETCH ===');
-  debugPrint('PersonId from SharedPrefs: $personId');
-  
+
   if (personId == null) {
-    debugPrint('PersonId is NULL - user not logged in');
     return [];
   }
-  
+
   final today = DateTime.now();
   final todayStr = _formatDateForQuery(today);
-  debugPrint('Date: $todayStr');
-  
+
   try {
     final todayDeliveries = await _fetchDeliveriesForDate(personId, todayStr);
     if (todayDeliveries.isNotEmpty) {
       return todayDeliveries;
     }
 
-    debugPrint('No deliveries found for today, checking next available date');
+    // No deliveries found for today, check next available date
     final nextDateResult = await SupabaseService.client
         .from('deliveries')
         .select('scheduled_date')
@@ -133,16 +137,15 @@ final todayDeliveriesProvider = FutureProvider<List<Map<String, dynamic>>>((ref)
       return [];
     }
 
-    final nextDateStr = _normalizeDateValue(nextDateResult.first['scheduled_date']);
+    final nextDateStr =
+        _normalizeDateValue(nextDateResult.first['scheduled_date']);
+    
     if (nextDateStr.isEmpty) {
       return [];
     }
 
     return _fetchDeliveriesForDate(personId, nextDateStr);
-    
   } catch (e, stack) {
-    debugPrint('ERROR fetching deliveries: $e');
-    debugPrint('Stack: $stack');
     return [];
   }
 });
@@ -152,10 +155,12 @@ class DeliveryDashboardScreen extends ConsumerStatefulWidget {
   const DeliveryDashboardScreen({super.key});
 
   @override
-  ConsumerState<DeliveryDashboardScreen> createState() => _DeliveryDashboardScreenState();
+  ConsumerState<DeliveryDashboardScreen> createState() =>
+      _DeliveryDashboardScreenState();
 }
 
-class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScreen> {
+class _DeliveryDashboardScreenState
+    extends ConsumerState<DeliveryDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -175,10 +180,10 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // Modern Header
-                SliverToBoxAdapter(
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                    // Decoration removed for clean look
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  // Decoration removed for clean look
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -225,23 +230,31 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                           Row(
                             children: [
                               IconButton.filledTonal(
-                                onPressed: () => ref.invalidate(todayDeliveriesProvider),
-                                icon: Icon(Icons.refresh, size: 20, color: colorScheme.onSurfaceVariant),
+                                onPressed: () =>
+                                    ref.invalidate(todayDeliveriesProvider),
+                                icon: Icon(Icons.refresh,
+                                    size: 20,
+                                    color: colorScheme.onSurfaceVariant),
                                 style: IconButton.styleFrom(
-                                  backgroundColor: colorScheme.surfaceContainerHighest,
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               IconButton.filledTonal(
                                 onPressed: () async {
-                                  final prefs = await SharedPreferences.getInstance();
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
                                   await prefs.remove('delivery_person_id');
                                   await prefs.remove('delivery_person_name');
                                   if (context.mounted) context.go('/login');
                                 },
-                                icon: Icon(Icons.logout, size: 20, color: colorScheme.onSurfaceVariant),
+                                icon: Icon(Icons.logout,
+                                    size: 20,
+                                    color: colorScheme.onSurfaceVariant),
                                 style: IconButton.styleFrom(
-                                  backgroundColor: colorScheme.surfaceContainerHighest,
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
                                 ),
                               ),
                             ],
@@ -254,17 +267,26 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                         loading: () => const SizedBox(height: 60),
                         error: (_, __) => const SizedBox(height: 60),
                         data: (deliveries) {
-                          final completed = deliveries.where((d) => d['status'] == 'delivered').length;
-                          final pending = deliveries.where((d) => d['status'] == 'pending' || d['status'] == 'in_transit').length;
+                          final completed = deliveries
+                              .where((d) => d['status'] == 'delivered')
+                              .length;
+                          final pending = deliveries
+                              .where((d) =>
+                                  d['status'] == 'pending' ||
+                                  d['status'] == 'in_transit')
+                              .length;
                           final total = deliveries.length;
-                          
+
                           return Row(
                             children: [
-                              _buildStatCard('$total', 'Total', Icons.local_shipping, Colors.white),
+                              _buildStatCard('$total', 'Total',
+                                  Icons.local_shipping, Colors.white),
                               const SizedBox(width: 8),
-                              _buildStatCard('$pending', 'Pending', Icons.pending_actions, Colors.amber),
+                              _buildStatCard('$pending', 'Pending',
+                                  Icons.pending_actions, Colors.amber),
                               const SizedBox(width: 8),
-                              _buildStatCard('$completed', 'Done', Icons.check_circle, Colors.greenAccent),
+                              _buildStatCard('$completed', 'Done',
+                                  Icons.check_circle, Colors.greenAccent),
                             ],
                           );
                         },
@@ -278,7 +300,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                 padding: const EdgeInsets.all(20),
                 sliver: SliverToBoxAdapter(
                   child: deliveriesAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(child: Text('Error: $e')),
                     data: (deliveries) {
                       return Column(
@@ -295,7 +318,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: colorScheme.primaryContainer,
                                   borderRadius: BorderRadius.circular(20),
@@ -311,44 +335,32 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                             ],
                           ),
                           const SizedBox(height: 16),
-                      
-                      // Delivery Cards
-                      if (deliveries.isEmpty)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Column(
-                              children: [
-                                Icon(Icons.check_circle_outline, size: 48, color: colorScheme.primary),
-                                const SizedBox(height: 16),
-                                const Text('No deliveries assigned for today!'),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Pull down to refresh',
-                                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+
+                          // Delivery Cards
+                          if (deliveries.isEmpty)
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.check_circle_outline,
+                                        size: 48, color: colorScheme.primary),
+                                    const SizedBox(height: 16),
+                                    const Text(
+                                        'No deliveries assigned for today!'),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Pull down to refresh',
+                                      style: TextStyle(
+                                          color: colorScheme.onSurfaceVariant),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 16),
-                                // DEBUG INFO - shows logged in user's ID
-                                Consumer(
-                                  builder: (context, ref, _) {
-                                    final personIdAsync = ref.watch(deliveryPersonIdProvider);
-                                    return personIdAsync.when(
-                                      data: (id) => Text(
-                                        'Debug: Logged in as\n$id',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                                      ),
-                                      loading: () => const Text('Loading ID...', style: TextStyle(fontSize: 10)),
-                                      error: (e, _) => Text('ID Error: $e', style: const TextStyle(fontSize: 10, color: Colors.red)),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        ...deliveries.map((delivery) => _buildDeliveryCard(context, delivery)),
+                              ),
+                            )
+                          else
+                            ...deliveries.map((delivery) =>
+                                _buildDeliveryCard(context, delivery)),
                         ],
                       );
                     },
@@ -394,10 +406,11 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     return 'Good Evening! 🌙';
   }
 
-  Widget _buildStatCard(String value, String label, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String value, String label, IconData icon, Color color) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
@@ -479,18 +492,19 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
     );
   }
 
-  Widget _buildDeliveryCard(BuildContext context, Map<String, dynamic> delivery) {
+  Widget _buildDeliveryCard(
+      BuildContext context, Map<String, dynamic> delivery) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final status = delivery['status'] ?? 'pending';
     final isDelivered = status == 'delivered';
-    
-    // Parse nested data
+
+    // Parse nested data from single query result
     final order = delivery['orders'] as Map<String, dynamic>?;
     final subscription = order?['subscriptions'] as Map<String, dynamic>?;
     final profile = order?['profiles'] as Map<String, dynamic>?;
     final product = subscription?['products'] as Map<String, dynamic>?;
-    
+
     // Extract values
     final customerName = profile?['full_name'] ?? 'Customer';
     final address = profile?['address'] ?? 'No address provided';
@@ -506,22 +520,25 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
       elevation: isDelivered ? 0 : 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: isDelivered 
-            ? BorderSide(color: AppTheme.successColor.withOpacity(0.3), width: 1)
+        side: isDelivered
+            ? BorderSide(
+                color: AppTheme.successColor.withOpacity(0.3), width: 1)
             : BorderSide.none,
       ),
       child: Container(
-        decoration: isDelivered ? null : BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              colorScheme.surface,
-              colorScheme.surface.withOpacity(0.95),
-            ],
-          ),
-        ),
+        decoration: isDelivered
+            ? null
+            : BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colorScheme.surface,
+                    colorScheme.surface.withOpacity(0.95),
+                  ],
+                ),
+              ),
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,13 +547,15 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: isDelivered 
+                  backgroundColor: isDelivered
                       ? AppTheme.successColor.withOpacity(0.2)
                       : colorScheme.primaryContainer,
                   child: Text(
-                    customerName.isNotEmpty ? customerName[0].toUpperCase() : '?',
+                    customerName.isNotEmpty
+                        ? customerName[0].toUpperCase()
+                        : '?',
                     style: TextStyle(
-                      color: isDelivered 
+                      color: isDelivered
                           ? AppTheme.successColor
                           : colorScheme.onPrimaryContainer,
                     ),
@@ -550,7 +569,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       Text(
                         customerName,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          decoration: isDelivered ? TextDecoration.lineThrough : null,
+                          decoration:
+                              isDelivered ? TextDecoration.lineThrough : null,
                           fontWeight: FontWeight.bold,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -559,14 +579,18 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          Icon(Icons.location_on, size: 12, color: colorScheme.onSurfaceVariant),
+                          Icon(Icons.location_on,
+                              size: 12, color: colorScheme.onSurfaceVariant),
                           const SizedBox(width: 4),
-                          Expanded(
+                          Flexible(
                             child: Text(
                               address,
-                              style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+                              style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 12),
                               overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
+                              maxLines: 2,
+                              softWrap: true,
                             ),
                           ),
                         ],
@@ -594,9 +618,10 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                 children: [
                   // Time Slot Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isMorning 
+                      color: isMorning
                           ? Colors.amber.withOpacity(0.1)
                           : Colors.indigo.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -607,13 +632,16 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                         Icon(
                           isMorning ? Icons.wb_sunny : Icons.nights_stay,
                           size: 12,
-                          color: isMorning ? Colors.amber.shade700 : Colors.indigo,
+                          color:
+                              isMorning ? Colors.amber.shade700 : Colors.indigo,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           isMorning ? 'AM' : 'PM',
                           style: TextStyle(
-                            color: isMorning ? Colors.amber.shade700 : Colors.indigo,
+                            color: isMorning
+                                ? Colors.amber.shade700
+                                : Colors.indigo,
                             fontWeight: FontWeight.w600,
                             fontSize: 10,
                           ),
@@ -623,7 +651,9 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                   ),
                   // Product Name Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.purple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -631,23 +661,32 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.local_drink, size: 12, color: Colors.purple.shade700),
+                        Icon(Icons.local_drink,
+                            size: 12, color: Colors.purple.shade700),
                         const SizedBox(width: 4),
-                        Text(
-                          delivery['orders']?['subscriptions']?['products']?['name'] ?? 'Milk',
-                          style: TextStyle(
-                            color: Colors.purple.shade700,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 10,
+                        Flexible(
+                          child: Text(
+                            delivery['orders']?['subscriptions']?['products']
+                                    ?['name'] ??
+                                'Milk',
+                            style: TextStyle(
+                              color: Colors.purple.shade700,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                       ],
                     ),
                   ),
                   // Liters Badge (Subscription orders)
-                  if (order?['quantity'] != null) // Removed 'order_type' check as subscription orders have quantity in orders table
+                  if (order?['quantity'] !=
+                      null) // Removed 'order_type' check as subscription orders have quantity in orders table
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
@@ -655,7 +694,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.water_drop, size: 12, color: Colors.blue.shade700),
+                          Icon(Icons.water_drop,
+                              size: 12, color: Colors.blue.shade700),
                           const SizedBox(width: 4),
                           Text(
                             '${order?['quantity'] ?? 1}L',
@@ -669,9 +709,11 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       ),
                     ),
                   // COD Badge (Shop orders)
-                  if (order?['payment_method'] == 'cod' || order?['order_type'] == 'one_time')
+                  if (order?['payment_method'] == 'cod' ||
+                      order?['order_type'] == 'one_time')
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
@@ -679,7 +721,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.payments_outlined, size: 12, color: Colors.green.shade700),
+                          Icon(Icons.payments_outlined,
+                              size: 12, color: Colors.green.shade700),
                           const SizedBox(width: 4),
                           Text(
                             'Collect ₹${(order?['total_amount'] ?? 0).toStringAsFixed(0)}',
@@ -694,7 +737,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                     ),
                   // Status Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppTheme.pendingColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -711,12 +755,12 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                 ],
               ),
             const SizedBox(height: 12),
-            
+
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Divider(height: 1),
             ),
-            
+
             // Product Details Row
             Row(
               children: [
@@ -726,7 +770,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                     color: colorScheme.secondaryContainer.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.inventory_2_outlined, color: colorScheme.secondary),
+                  child: Icon(Icons.inventory_2_outlined,
+                      color: colorScheme.secondary),
                 ),
                 const SizedBox(width: 12),
                 Column(
@@ -734,19 +779,21 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                   children: [
                     Text(
                       '$quantity $unit $productName',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 16),
                     ),
                     Text(
                       '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
-                      style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+                      style: TextStyle(
+                          color: colorScheme.onSurfaceVariant, fontSize: 12),
                     ),
                   ],
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Action Buttons - Better layout
             if (!isDelivered)
               Column(
@@ -755,7 +802,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                   Row(
                     children: [
                       // Navigate Button
-                      if (address.isNotEmpty && address != 'Address not available')
+                      if (address.isNotEmpty &&
+                          address != 'Address not available')
                         Expanded(
                           child: FilledButton.tonalIcon(
                             onPressed: () => _openMaps(address),
@@ -766,9 +814,10 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
                             ),
                           ),
                         ),
-                      if (address.isNotEmpty && address != 'Address not available')
+                      if (address.isNotEmpty &&
+                          address != 'Address not available')
                         const SizedBox(width: 12),
-                      // Call Button  
+                      // Call Button
                       if (phone.isNotEmpty)
                         Expanded(
                           child: FilledButton.tonalIcon(
@@ -831,7 +880,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
 
   Future<void> _openMaps(String address) async {
     final encodedAddress = Uri.encodeComponent(address);
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$encodedAddress');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -862,15 +912,15 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
         await SupabaseService.client.from('orders').update({
           'status': 'delivered',
         }).eq('id', delivery['id']);
-        
+
         // Update deliveries table (has delivered_at column)
         await SupabaseService.client.from('deliveries').update({
           'status': 'delivered',
           'delivered_at': DateTime.now().toIso8601String(),
         }).eq('order_id', delivery['id']);
-        
+
         ref.invalidate(todayDeliveriesProvider);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -891,7 +941,7 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
 
   Future<void> _reportIssue(Map<String, dynamic> delivery) async {
     final issueController = TextEditingController();
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -918,7 +968,8 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.warningColor),
+            style:
+                FilledButton.styleFrom(backgroundColor: AppTheme.warningColor),
             child: const Text('Report'),
           ),
         ],
@@ -931,15 +982,15 @@ class _DeliveryDashboardScreenState extends ConsumerState<DeliveryDashboardScree
         await SupabaseService.client.from('orders').update({
           'status': 'failed',
         }).eq('id', delivery['id']);
-        
+
         // Update deliveries table (has issue_notes column)
         await SupabaseService.client.from('deliveries').update({
           'status': 'issue',
           'issue_notes': issueController.text.trim(),
         }).eq('order_id', delivery['id']);
-        
+
         ref.invalidate(todayDeliveriesProvider);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Issue reported')),

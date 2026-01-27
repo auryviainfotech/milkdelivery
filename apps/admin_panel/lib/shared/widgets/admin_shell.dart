@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:milk_core/milk_core.dart';
 
 /// Admin panel sidebar shell for web navigation
 class AdminShell extends StatelessWidget {
@@ -154,9 +155,12 @@ class AdminShell extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              context.go('/login');
+              await SupabaseService.client.auth.signOut();
+              if (context.mounted) {
+                context.go('/login');
+              }
             },
             child: const Text('Logout'),
           ),

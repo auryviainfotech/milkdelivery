@@ -59,16 +59,9 @@ final ordersProvider = FutureProvider<List<OrderModel>>((ref) async {
   
   try {
     return (response as List).map((json) {
-      try {
-        return OrderModel.fromJson(json);
-      } catch (e) {
-        debugPrint('Error parsing order JSON: $json');
-        debugPrint('Error details: $e');
-        rethrow;
-      }
+      return OrderModel.fromJson(json);
     }).toList();
   } catch (e) {
-    debugPrint('Fatal error mapping orders: $e');
     return [];
   }
 });
@@ -148,4 +141,63 @@ final unreadNotificationCountProvider = FutureProvider<int>((ref) async {
       .eq('is_read', false);
   
   return (response as List).length;
+});
+
+/// Provider for user profile stats (deliveries count, months, savings)
+final userProfileStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final user = SupabaseService.currentUser;
+  if (user == null) {
+    return {'deliveries': 0, 'months': 0, 'savings': 0.0};
+  }
+
+  try {
+    // Count delivered orders
+    final deliveriesResponse = await SupabaseService.client
+        .from('orders')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'delivered');
+    final deliveriesCount = (deliveriesResponse as List).length;
+
+    // Calculate months subscribed (based on oldest active subscription)
+    final subsResponse = await SupabaseService.client
+        .from('subscriptions')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .order('created_at', ascending: true)
+        .limit(1);
+    
+    int monthsSubscribed = 0;
+    if ((subsResponse as List).isNotEmpty) {
+      final createdAt = DateTime.parse(subsResponse.first['created_at']);
+      final now = DateTime.now();
+      monthsSubscribed = ((now.year - createdAt.year) * 12) + (now.month - createdAt.month);
+      if (monthsSubscribed < 1 && now.isAfter(createdAt)) {
+        monthsSubscribed = 1; // At least 1 month if they have a subscription
+      }
+    }
+
+    // Calculate total savings (assume 10% savings vs market price)
+    // This is based on total amount from delivered orders
+    final ordersResponse = await SupabaseService.client
+        .from('orders')
+        .select('total_amount')
+        .eq('user_id', user.id)
+        .eq('status', 'delivered');
+    
+    double totalSpent = 0;
+    for (final order in (ordersResponse as List)) {
+      totalSpent += (order['total_amount'] ?? 0).toDouble();
+    }
+    // Assume 10% savings (market price would be ~11% higher)
+    final savings = totalSpent * 0.10;
+
+    return {
+      'deliveries': deliveriesCount,
+      'months': monthsSubscribed,
+      'savings': savings,
+    };
+  } catch (e) {
+    return {'deliveries': 0, 'months': 0, 'savings': 0.0};
+  }
 });
