@@ -598,15 +598,7 @@ class _DeliveryDashboardScreenState
                     ],
                   ),
                 ),
-                if (phone.isNotEmpty)
-                  IconButton.filledTonal(
-                    onPressed: () => _makeCall(phone),
-                    icon: const Icon(Icons.call, size: 20),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.green.withOpacity(0.1),
-                      foregroundColor: Colors.green,
-                    ),
-                  ),
+
               ],
             ),
             const SizedBox(height: 8),
@@ -774,20 +766,24 @@ class _DeliveryDashboardScreenState
                       color: colorScheme.secondary),
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$quantity $unit $productName',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 16),
-                    ),
-                    Text(
-                      '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
-                      style: TextStyle(
-                          color: colorScheme.onSurfaceVariant, fontSize: 12),
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$quantity $unit $productName',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      Text(
+                        '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
+                        style: TextStyle(
+                            color: colorScheme.onSurfaceVariant, fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
