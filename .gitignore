@@ -48,3 +48,8 @@ app.*.map.json
 .env
 .env.*
 !.env.example
+
+# Supabase debug/utility scripts
+supabase/*.ps1
+supabase/*.sql
+!supabase/migrations/

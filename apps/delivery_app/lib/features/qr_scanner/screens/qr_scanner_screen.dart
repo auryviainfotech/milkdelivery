@@ -54,7 +54,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   void _validateAndConfirm(String code) {
     // The QR code is the customer's user ID
     _scannedCustomerId = code;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -73,7 +73,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _litersController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'Liters Delivered',
                   border: const OutlineInputBorder(),
@@ -122,7 +123,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     final liters = double.tryParse(_litersController.text) ?? 0;
     if (liters <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter valid liters'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('Please enter valid liters'),
+            backgroundColor: Colors.red),
       );
       setState(() => _isScanned = false);
       _controller?.start();
@@ -136,22 +139,22 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           .select('liters_remaining, full_name')
           .eq('id', _scannedCustomerId!)
           .single();
-      
-      final currentLiters = (profile['liters_remaining'] as num?)?.toDouble() ?? 0.0;
+
+      final currentLiters =
+          (profile['liters_remaining'] as num?)?.toDouble() ?? 0.0;
       final customerName = profile['full_name'] ?? 'Customer';
-      
+
       if (currentLiters < liters) {
         if (!mounted) return;
-        
+
         final proceed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Insufficient Balance'),
             content: Text(
-              '$customerName only has ${currentLiters.toStringAsFixed(1)}L remaining.\n'
-              'You are trying to deliver $liters L.\n\n'
-              'Proceed with negative balance (Overdraft)?'
-            ),
+                '$customerName only has ${currentLiters.toStringAsFixed(1)}L remaining.\n'
+                'You are trying to deliver $liters L.\n\n'
+                'Proceed with negative balance (Overdraft)?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -165,7 +168,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             ],
           ),
         );
-        
+
         if (proceed != true) {
           setState(() => _isScanned = false);
           _controller?.start();
@@ -174,41 +177,36 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       }
 
       // Deduct liters from customer's quota
-      await SupabaseService.client
-          .from('profiles')
-          .update({
-            'liters_remaining': currentLiters - liters,
-          })
-          .eq('id', _scannedCustomerId!);
+      await SupabaseService.client.from('profiles').update({
+        'liters_remaining': currentLiters - liters,
+      }).eq('id', _scannedCustomerId!);
 
       // Update delivery record
-      await SupabaseService.client
-          .from('deliveries')
-          .update({
-            'status': 'delivered',
-            'delivered_at': DateTime.now().toIso8601String(),
-            'qr_scanned': true,
-            'liters_delivered': liters,
-          })
-          .eq('order_id', widget.orderId);
+      await SupabaseService.client.from('deliveries').update({
+        'status': 'delivered',
+        'delivered_at': DateTime.now().toIso8601String(),
+        'qr_scanned': true,
+        'liters_delivered': liters,
+      }).eq('order_id', widget.orderId);
 
       // Update order status
       await SupabaseService.client
           .from('orders')
-          .update({'status': 'delivered'})
-          .eq('id', widget.orderId);
+          .update({'status': 'delivered'}).eq('id', widget.orderId);
 
       // Get product name from order for notification
       String productName = 'Milk';
       try {
         final orderData = await SupabaseService.client
             .from('orders')
-            .select('subscription_id, subscriptions!orders_subscription_id_fkey(product_id, products!subscriptions_product_id_fkey(name))')
+            .select(
+                'subscription_id, subscriptions!orders_subscription_id_fkey(product_id, products!subscriptions_product_id_fkey(name))')
             .eq('id', widget.orderId)
             .maybeSingle();
-        
+
         if (orderData != null) {
-          final subscription = orderData['subscriptions'] as Map<String, dynamic>?;
+          final subscription =
+              orderData['subscriptions'] as Map<String, dynamic>?;
           final product = subscription?['products'] as Map<String, dynamic>?;
           productName = product?['name'] ?? 'Milk';
         }
@@ -223,7 +221,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       await SupabaseService.client.from('notifications').insert({
         'user_id': _scannedCustomerId,
         'title': '🥛 Delivery Complete!',
-        'body': '$productName (${liters.toStringAsFixed(1)}L) delivered. You have ${newLitersRemaining.toStringAsFixed(1)}L remaining.',
+        'body':
+            '$productName (${liters.toStringAsFixed(1)}L) delivered. You have ${newLitersRemaining.toStringAsFixed(1)}L remaining.',
         'type': 'deliveryUpdate',
         'data': {
           'order_id': widget.orderId,
@@ -241,7 +240,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               children: [
                 const Icon(Icons.check_circle, color: Colors.white),
                 const SizedBox(width: 8),
-                Text('Delivered ${liters.toStringAsFixed(1)}L to $customerName!'),
+                Text(
+                    'Delivered ${liters.toStringAsFixed(1)}L to $customerName!'),
               ],
             ),
             backgroundColor: AppTheme.successColor,
@@ -258,7 +258,6 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +287,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           // Overlay
           Container(
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity( 0.5),
+              color: Colors.black.withOpacity(0.5),
             ),
           ),
 

@@ -7,10 +7,12 @@ class DeliveryCompleteProfileScreen extends StatefulWidget {
   const DeliveryCompleteProfileScreen({super.key});
 
   @override
-  State<DeliveryCompleteProfileScreen> createState() => _DeliveryCompleteProfileScreenState();
+  State<DeliveryCompleteProfileScreen> createState() =>
+      _DeliveryCompleteProfileScreenState();
 }
 
-class _DeliveryCompleteProfileScreenState extends State<DeliveryCompleteProfileScreen> {
+class _DeliveryCompleteProfileScreenState
+    extends State<DeliveryCompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _vehicleController = TextEditingController();
@@ -36,7 +38,8 @@ class _DeliveryCompleteProfileScreenState extends State<DeliveryCompleteProfileS
         id: user.id,
         phone: user.phone ?? '',
         fullName: _nameController.text.trim(),
-        address: _vehicleController.text.trim(), // Using address field for vehicle number
+        address: _vehicleController.text
+            .trim(), // Using address field for vehicle number
         role: UserRole.delivery,
         createdAt: DateTime.now(),
       );
@@ -60,7 +63,7 @@ class _DeliveryCompleteProfileScreenState extends State<DeliveryCompleteProfileS
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Complete Profile'),
@@ -114,8 +117,9 @@ class _DeliveryCompleteProfileScreenState extends State<DeliveryCompleteProfileS
                   ),
                   textInputAction: TextInputAction.next,
                   textCapitalization: TextCapitalization.words,
-                  validator: (value) => 
-                      (value == null || value.isEmpty) ? 'Please enter your name' : null,
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Please enter your name'
+                      : null,
                 ),
                 const SizedBox(height: 20),
 
@@ -141,9 +145,12 @@ class _DeliveryCompleteProfileScreenState extends State<DeliveryCompleteProfileS
 
                 FilledButton(
                   onPressed: _isLoading ? null : _handleSave,
-                  child: _isLoading 
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Start Delivering'),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Start Delivering'),
                 ),
               ],
             ),

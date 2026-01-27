@@ -10,17 +10,25 @@ class SupabaseService {
     required String supabaseUrl,
     required String supabaseAnonKey,
   }) async {
-    final localStorage = SharedPreferencesLocalStorage(
-      persistSessionKey: supabasePersistSessionKey,
-    );
-    await localStorage.initialize();
+    // Prevent double initialization crash
+    if (_client != null) {
+      debugPrint('SupabaseService already initialized, skipping...');
+      return;
+    }
+    
+    try {
+      // Check if Supabase is already initialized globally
+      _client = Supabase.instance.client;
+      debugPrint('Supabase was already initialized globally');
+      return;
+    } catch (_) {
+      // Not initialized yet, proceed with initialization
+    }
+    
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
       debug: kDebugMode,
-      authOptions: FlutterAuthClientOptions(
-        localStorage: localStorage,
-      ),
     );
     _client = Supabase.instance.client;
   }

@@ -12,7 +12,6 @@ class RouteListScreen extends ConsumerWidget {
 
   // Fallback dummy data if Supabase fails
 
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -36,7 +35,8 @@ class RouteListScreen extends ConsumerWidget {
             children: [
               Icon(Icons.error_outline, size: 48, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('Error loading deliveries', style: theme.textTheme.titleMedium),
+              Text('Error loading deliveries',
+                  style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: () => ref.refresh(todayDeliveriesProvider),
@@ -52,7 +52,8 @@ class RouteListScreen extends ConsumerWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.local_shipping_outlined, size: 64, color: colorScheme.onSurfaceVariant),
+                  Icon(Icons.local_shipping_outlined,
+                      size: 64, color: colorScheme.onSurfaceVariant),
                   const SizedBox(height: 16),
                   Text(
                     'No upcoming deliveries',
@@ -75,15 +76,16 @@ class RouteListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDeliveryList(BuildContext context, List<Map<String, dynamic>> rawDeliveries) {
+  Widget _buildDeliveryList(
+      BuildContext context, List<Map<String, dynamic>> rawDeliveries) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     // Transform raw Supabase data to flat format for cards
     final deliveries = rawDeliveries.map((delivery) {
       final order = delivery['orders'] as Map<String, dynamic>?;
       final profile = order?['profiles'] as Map<String, dynamic>?;
-      
+
       return {
         'id': delivery['id'],
         'name': profile?['full_name'] ?? 'Customer',
@@ -95,8 +97,9 @@ class RouteListScreen extends ConsumerWidget {
         'plan': 'daily', // Default plan
       };
     }).toList();
-    
-    final pendingCount = deliveries.where((d) => d['status'] == 'pending').length;
+
+    final pendingCount =
+        deliveries.where((d) => d['status'] == 'pending').length;
 
     return Column(
       children: [
@@ -116,7 +119,8 @@ class RouteListScreen extends ConsumerWidget {
                       color: colorScheme.onPrimaryContainer,
                     ),
                   ),
-                  Text('Total', style: TextStyle(color: colorScheme.onPrimaryContainer)),
+                  Text('Total',
+                      style: TextStyle(color: colorScheme.onPrimaryContainer)),
                 ],
               ),
               Column(
@@ -128,7 +132,8 @@ class RouteListScreen extends ConsumerWidget {
                       color: AppTheme.pendingColor,
                     ),
                   ),
-                  const Text('Pending', style: TextStyle(color: AppTheme.pendingColor)),
+                  const Text('Pending',
+                      style: TextStyle(color: AppTheme.pendingColor)),
                 ],
               ),
             ],
@@ -148,13 +153,15 @@ class RouteListScreen extends ConsumerWidget {
               final customer = order?['profiles'] as Map<String, dynamic>?;
               final phone = customer?['phone'] ?? delivery['phone'] ?? '';
               final address = customer?['address'] ?? delivery['address'] ?? '';
-              
+
               return _DeliveryCard(
                 delivery: delivery,
                 index: index + 1,
                 onCall: () => _makeCall(phone),
                 onNavigate: () => _openMaps(address),
-                onConfirm: isDelivered ? null : () => context.push('/delivery/${delivery['id']}'),
+                onConfirm: isDelivered
+                    ? null
+                    : () => context.push('/delivery/${delivery['id']}'),
               );
             },
           ),
@@ -172,7 +179,8 @@ class RouteListScreen extends ConsumerWidget {
 
   Future<void> _openMaps(String address) async {
     final encodedAddress = Uri.encodeComponent(address);
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+    final uri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$encodedAddress');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
@@ -200,12 +208,14 @@ class _DeliveryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDelivered = delivery['status'] == 'delivered';
-    
+
     // Get customer info from nested order/profile (same as dashboard)
     final order = delivery['orders'] as Map<String, dynamic>?;
     final customer = order?['profiles'] as Map<String, dynamic>?;
-    final customerName = customer?['full_name'] ?? delivery['name'] ?? 'Customer';
-    final address = customer?['address'] ?? delivery['address'] ?? 'Address not provided';
+    final customerName =
+        customer?['full_name'] ?? delivery['name'] ?? 'Customer';
+    final address =
+        customer?['address'] ?? delivery['address'] ?? 'Address not provided';
     final phone = customer?['phone'] ?? delivery['phone'] ?? '';
     final deliverySlot = delivery['delivery_slot'] ?? 'morning';
 
@@ -221,13 +231,16 @@ class _DeliveryCard extends StatelessWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: isDelivered ? AppTheme.successColor : colorScheme.primary,
+                  backgroundColor:
+                      isDelivered ? AppTheme.successColor : colorScheme.primary,
                   radius: 16,
-                  child: isDelivered 
+                  child: isDelivered
                       ? const Icon(Icons.check, color: Colors.white, size: 18)
                       : Text(
                           '$index',
-                          style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: colorScheme.onPrimary,
+                              fontWeight: FontWeight.bold),
                         ),
                 ),
                 const SizedBox(width: 12),
@@ -237,27 +250,36 @@ class _DeliveryCard extends StatelessWidget {
                     children: [
                       Text(
                         customerName,
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       if (phone.isNotEmpty)
                         Text(
                           phone,
-                          style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                     ],
                   ),
                 ),
                 // Status badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isDelivered ? AppTheme.successColor : colorScheme.secondaryContainer,
+                    color: isDelivered
+                        ? AppTheme.successColor
+                        : colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    isDelivered ? 'DELIVERED' : (deliverySlot == 'morning' ? 'AM' : 'PM'),
+                    isDelivered
+                        ? 'DELIVERED'
+                        : (deliverySlot == 'morning' ? 'AM' : 'PM'),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: isDelivered ? Colors.white : colorScheme.onSecondaryContainer,
+                      color: isDelivered
+                          ? Colors.white
+                          : colorScheme.onSecondaryContainer,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -276,6 +298,8 @@ class _DeliveryCard extends StatelessWidget {
                   child: Text(
                     address,
                     style: theme.textTheme.bodyMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -304,10 +328,12 @@ class _DeliveryCard extends StatelessWidget {
                       ? FilledButton.icon(
                           onPressed: null,
                           icon: const Icon(Icons.check, size: 16),
-                          label: const Text('Done', overflow: TextOverflow.ellipsis),
+                          label: const Text('Done',
+                              overflow: TextOverflow.ellipsis),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppTheme.successColor,
-                            disabledBackgroundColor: AppTheme.successColor.withValues(alpha: 0.5),
+                            disabledBackgroundColor:
+                                AppTheme.successColor.withValues(alpha: 0.5),
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                         )

@@ -89,7 +89,7 @@ class _DeliverySplashScreenState extends State<DeliverySplashScreen>
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity( 0.1),
+                              color: Colors.black.withOpacity(0.1),
                               blurRadius: 20,
                               offset: const Offset(0, 10),
                             ),
@@ -105,17 +105,18 @@ class _DeliverySplashScreenState extends State<DeliverySplashScreen>
                       // App name
                       Text(
                         'Milk Delivery',
-                        style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.headlineLarge?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Delivery Partner',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white.withOpacity( 0.8),
-                        ),
+                              color: Colors.white.withOpacity(0.8),
+                            ),
                       ),
                       const SizedBox(height: 48),
 

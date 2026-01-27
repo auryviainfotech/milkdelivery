@@ -55,7 +55,7 @@ final appRouter = GoRouter(
       name: 'login',
       builder: (context, state) => const DeliveryLoginScreen(),
     ),
-    
+
     // Complete Profile (for new delivery persons)
     GoRoute(
       path: '/complete-profile',
