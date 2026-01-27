@@ -1,7 +1,7 @@
 {
-  "buildCommand": "chmod +x build.sh && ./build.sh",
+  "buildCommand": "echo 'Using pre-built files'",
   "outputDirectory": "build/web",
-  "installCommand": "echo 'Skipping install'",
+  "installCommand": "echo 'No install needed'",
   "framework": null,
   "routes": [
     { "handle": "filesystem" },
