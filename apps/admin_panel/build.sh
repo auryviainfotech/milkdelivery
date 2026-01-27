@@ -1,20 +1,41 @@
 #!/bin/bash
+set -e
 
-# 1. Install Flutter if not present
-if [ -d "flutter" ]; then
-    cd flutter && git pull && cd ..
-else
-    git clone https://github.com/flutter/flutter.git -b stable
+echo "=== Starting Flutter Web Build ==="
+
+# 1. Install Flutter
+FLUTTER_VERSION="3.24.0"
+echo "Installing Flutter $FLUTTER_VERSION..."
+
+if [ ! -d "flutter" ]; then
+    git clone https://github.com/flutter/flutter.git -b stable --depth 1
 fi
 
+export PATH="$PATH:$(pwd)/flutter/bin"
+
 # 2. Setup Flutter
-./flutter/bin/flutter doctor
-./flutter/bin/flutter config --enable-web
+echo "Setting up Flutter..."
+flutter --version
+flutter config --enable-web
+flutter doctor -v
 
 # 3. Create .env file from Vercel Environment Variables
 echo "Creating .env file..."
-printf "SUPABASE_URL=$SUPABASE_URL\nSUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" > .env
+if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+    echo "SUPABASE_URL=$SUPABASE_URL" > .env
+    echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
+    echo ".env file created successfully"
+else
+    echo "WARNING: Environment variables not set!"
+fi
 
-# 4. Build the web app
+# 4. Get dependencies
+echo "Getting dependencies..."
+flutter pub get
+
+# 5. Build the web app
 echo "Building Flutter Web App..."
-./flutter/bin/flutter build web --release
+flutter build web --release --web-renderer html
+
+echo "=== Build Complete ==="
+ls -la build/web/
