@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../dashboard/screens/delivery_dashboard_screen.dart';
 
 /// Provider to fetch delivery details using Delivery ID
@@ -138,7 +139,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                         const SizedBox(height: 8),
                         
                         // Product Info
-                        _buildProductInfo(colorScheme, order),
+                        _buildProductInfo(context, colorScheme, order),
                         
                         const SizedBox(height: 8),
                         Text(
@@ -568,9 +569,10 @@ class DeliveryConfirmScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildProductInfo(ColorScheme colorScheme, Map<String, dynamic>? order) {
+  Widget _buildProductInfo(BuildContext context, ColorScheme colorScheme, Map<String, dynamic>? order) {
     if (order == null) return const SizedBox.shrink();
     
+    final theme = Theme.of(context);
     final subscription = order['subscriptions'] as Map<String, dynamic>?;
     final product = subscription?['products'] as Map<String, dynamic>?;
     
@@ -578,36 +580,221 @@ class DeliveryConfirmScreen extends ConsumerWidget {
     final unit = product?['unit'] ?? 'L';
     final quantity = subscription?['quantity'] ?? 1;
     final deliverySlot = subscription?['delivery_slot'] ?? 'morning';
+    final imageUrl = product?['image_url'] as String?;
+    final description = product?['description'] as String?;
+    final category = product?['category'] as String?;
+    final price = product?['price'];
     
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: colorScheme.secondaryContainer.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(12),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Text(
+            'Product Details',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          child: Icon(Icons.inventory_2_outlined, color: colorScheme.secondary, size: 24),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
+          const SizedBox(height: 12),
+          
+          // Product info row
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '$quantity $unit $productName',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
+              // Product Image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: imageUrl != null && imageUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Center(
+                            child: Icon(
+                              Icons.local_drink,
+                              size: 36,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Icon(
+                            Icons.local_drink,
+                            size: 36,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                ),
               ),
-              Text(
-                '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: 16),
+              
+              // Product Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Product Name
+                    Text(
+                      productName,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    
+                    // Description
+                    if (description != null && description.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          description,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    
+                    // Badges row
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        // Quantity badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$quantity x $unit',
+                            style: TextStyle(
+                              color: colorScheme.onPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        
+                        // Category badge
+                        if (category != null && category.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: category == 'subscription' 
+                                  ? Colors.green.withOpacity(0.15)
+                                  : Colors.orange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              category == 'subscription' ? 'Subscription' : 'One-time',
+                              style: TextStyle(
+                                color: category == 'subscription' 
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade700,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        
+                        // Price badge (if one-time order)
+                        if (price != null && category == 'one_time')
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '₹${(price as num).toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-      ],
+          
+          const SizedBox(height: 12),
+          
+          // Delivery Slot
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: deliverySlot == 'morning' 
+                  ? Colors.amber.withOpacity(0.1)
+                  : Colors.indigo.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  deliverySlot == 'morning' ? Icons.wb_sunny : Icons.nights_stay,
+                  size: 18,
+                  color: deliverySlot == 'morning' 
+                      ? Colors.amber.shade700 
+                      : Colors.indigo,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
+                  style: TextStyle(
+                    color: deliverySlot == 'morning' 
+                        ? Colors.amber.shade700 
+                        : Colors.indigo,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

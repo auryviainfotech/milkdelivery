@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// Provider for current delivery person's ID from SharedPreferences
 final deliveryPersonIdProvider = FutureProvider<String?>((ref) async {
@@ -772,39 +773,15 @@ class _DeliveryDashboardScreenState
               child: Divider(height: 1),
             ),
 
-            // Product Details Row
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: colorScheme.secondaryContainer.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.inventory_2_outlined,
-                      color: colorScheme.secondary),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$quantity $unit $productName',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 16),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
-                      ),
-                      Text(
-                        '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
-                        style: TextStyle(
-                            color: colorScheme.onSurfaceVariant, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            // Product Details Row - Enhanced with image
+            _buildProductDetailsWidget(
+              context,
+              product: product,
+              quantity: quantity,
+              unit: unit,
+              productName: productName,
+              deliverySlot: deliverySlot,
+              isDelivered: isDelivered,
             ),
 
             const SizedBox(height: 24),
@@ -882,6 +859,175 @@ class _DeliveryDashboardScreenState
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildProductDetailsWidget(
+    BuildContext context, {
+    required Map<String, dynamic>? product,
+    required int quantity,
+    required String unit,
+    required String productName,
+    required String deliverySlot,
+    required bool isDelivered,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    final imageUrl = product?['image_url'] as String?;
+    final description = product?['description'] as String?;
+    final category = product?['category'] as String?;
+    final price = product?['price'];
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDelivered 
+            ? colorScheme.surfaceContainerHighest.withOpacity(0.3)
+            : colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Product Image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
+              ),
+              child: imageUrl != null && imageUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Center(
+                        child: Icon(
+                          Icons.local_drink,
+                          size: 32,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    )
+                  : Center(
+                      child: Icon(
+                        Icons.local_drink,
+                        size: 32,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Product Details
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Product Name
+                Text(
+                  productName,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    decoration: isDelivered ? TextDecoration.lineThrough : null,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                // Quantity and Unit
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$quantity x $unit',
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Category badge
+                    if (category != null && category.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: category == 'subscription' 
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          category == 'subscription' ? 'Subscription' : 'One-time',
+                          style: TextStyle(
+                            color: category == 'subscription' 
+                                ? Colors.green.shade700
+                                : Colors.orange.shade700,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Description (if available)
+                if (description != null && description.isNotEmpty)
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                // Delivery Slot
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      deliverySlot == 'morning' ? Icons.wb_sunny : Icons.nights_stay,
+                      size: 14,
+                      color: deliverySlot == 'morning' 
+                          ? Colors.amber.shade700 
+                          : Colors.indigo,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${deliverySlot[0].toUpperCase()}${deliverySlot.substring(1)} Delivery',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
