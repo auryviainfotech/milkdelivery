@@ -242,6 +242,17 @@ class _DeliveryDashboardScreenState
                               ),
                               const SizedBox(width: 8),
                               IconButton.filledTonal(
+                                onPressed: () => _showAdminSupportDialog(context),
+                                icon: Icon(Icons.support_agent,
+                                    size: 20,
+                                    color: colorScheme.primary),
+                                style: IconButton.styleFrom(
+                                  backgroundColor:
+                                      colorScheme.primaryContainer,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
                                 onPressed: () async {
                                   final prefs =
                                       await SharedPreferences.getInstance();
@@ -381,6 +392,9 @@ class _DeliveryDashboardScreenState
             case 1:
               context.push('/routes');
               break;
+            case 2:
+              _showAdminSupportDialog(context);
+              break;
           }
         },
         destinations: const [
@@ -393,6 +407,11 @@ class _DeliveryDashboardScreenState
             icon: Icon(Icons.route_outlined),
             selectedIcon: Icon(Icons.route),
             label: 'Routes',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.support_agent_outlined),
+            selectedIcon: Icon(Icons.support_agent),
+            label: 'Support',
           ),
         ],
       ),
@@ -1000,5 +1019,160 @@ class _DeliveryDashboardScreenState
         }
       }
     }
+  }
+
+  // Admin Support Dialog
+  void _showAdminSupportDialog(BuildContext context) {
+    const String supportPhone = '9886598059';
+    const String supportEmail = 'auddhattyaventures@gmail.com';
+    
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outline.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.support_agent,
+                size: 40,
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Admin Support',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Need help? Contact admin for assistance',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            
+            // Contact Options
+            // Call Button
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final uri = Uri.parse('tel:$supportPhone');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri);
+                  }
+                },
+                icon: const Icon(Icons.phone),
+                label: const Text('Call Admin: $supportPhone'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.green,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // WhatsApp Button
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final uri = Uri.parse(
+                    'https://wa.me/91$supportPhone?text=Hi, I need help with a delivery.',
+                  );
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                icon: const Icon(Icons.chat),
+                label: const Text('WhatsApp Admin'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Email Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final uri = Uri.parse(
+                    'mailto:$supportEmail?subject=Delivery App Support Request',
+                  );
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri);
+                  }
+                },
+                icon: const Icon(Icons.email),
+                label: const Text('Email: $supportEmail'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Business info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.business, size: 16, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Auddhatya Ventures',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+          ],
+        ),
+      ),
+    );
   }
 }

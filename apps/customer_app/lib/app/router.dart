@@ -14,6 +14,7 @@ import '../features/orders/screens/orders_screen.dart';
 import '../features/orders/screens/order_detail_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/profile/screens/qr_code_screen.dart';
+import '../features/profile/screens/help_support_screen.dart';
 import '../features/notifications/screens/notifications_screen.dart';
 import '../features/shop/screens/shop_screen.dart';
 import '../shared/widgets/main_shell.dart';
@@ -101,6 +102,11 @@ final appRouter = GoRouter(
       path: '/qr-code',
       name: 'qrCode',
       builder: (context, state) => const QrCodeScreen(),
+    ),
+    GoRoute(
+      path: '/help-support',
+      name: 'helpSupport',
+      builder: (context, state) => const HelpSupportScreen(),
     ),
     GoRoute(
       path: '/subscription/:id',

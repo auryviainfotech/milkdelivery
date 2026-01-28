@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../dashboard/screens/delivery_dashboard_screen.dart';
 
 /// Provider to fetch delivery details using Delivery ID
@@ -209,13 +211,47 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      _showManualConfirmDialog(context, delivery, ref);
-                    },
-                    child: const Text('Deliver without QR scan'),
+                const SizedBox(height: 16),
+                // Upload Photo Option
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.secondaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: colorScheme.secondary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.camera_alt,
+                        size: 40,
+                        color: colorScheme.secondary,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Or Upload Delivery Photo',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Take a photo as proof of delivery if QR scan is not possible',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => _showPhotoUploadDialog(context, delivery, ref),
+                        icon: const Icon(Icons.add_a_photo),
+                        label: const Text('Take Photo'),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -351,70 +387,183 @@ class DeliveryConfirmScreen extends ConsumerWidget {
     );
   }
 
-  void _showManualConfirmDialog(BuildContext context, Map<String, dynamic> delivery, WidgetRef ref) {
+  void _showPhotoUploadDialog(BuildContext context, Map<String, dynamic> delivery, WidgetRef ref) {
+    File? selectedImage;
+    bool isUploading = false;
+    
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Manual Confirmation'),
-        content: const Text(
-          'Are you sure you want to mark this delivery as complete without QR scan? This should only be done if the customer cannot show their QR code.',
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.camera_alt, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              const Text('Upload Delivery Photo'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Take a photo of the delivered milk as proof of delivery.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                
+                // Image preview or placeholder
+                Container(
+                  width: double.infinity,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: selectedImage != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            selectedImage!,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_photo_alternate, 
+                              size: 48, 
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No photo selected',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Camera and Gallery buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isUploading ? null : () async {
+                          final picker = ImagePicker();
+                          final image = await picker.pickImage(
+                            source: ImageSource.camera,
+                            imageQuality: 70,
+                          );
+                          if (image != null) {
+                            setDialogState(() {
+                              selectedImage = File(image.path);
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Camera'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: isUploading ? null : () async {
+                          final picker = ImagePicker();
+                          final image = await picker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 70,
+                          );
+                          if (image != null) {
+                            setDialogState(() {
+                              selectedImage = File(image.path);
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Gallery'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isUploading ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: (selectedImage == null || isUploading) ? null : () async {
+                setDialogState(() => isUploading = true);
+                
+                try {
+                  // For now, we'll just mark delivery as complete with photo confirmation
+                  // Photo can be stored locally or uploaded to storage bucket later
+                  
+                  // Update orders table
+                  await SupabaseService.client
+                      .from('orders')
+                      .update({'status': 'delivered'})
+                      .eq('id', delivery['order_id']);
+                  
+                  // Update deliveries table with photo confirmation note
+                  await SupabaseService.client
+                      .from('deliveries')
+                      .update({
+                        'status': 'delivered',
+                        'delivered_at': DateTime.now().toIso8601String(),
+                        'issue_notes': 'Delivered with photo confirmation (QR not scanned)',
+                      })
+                      .eq('id', delivery['id']);
+                  
+                  // Invalidate providers to refresh dashboard data
+                  final String orderId = delivery['order_id'] as String;
+                  ref.invalidate(todayDeliveriesProvider);
+                  ref.invalidate(deliveryDetailProvider(orderId));
+                  
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                  }
+                  
+                  if (context.mounted) {
+                    context.go('/dashboard');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✓ Delivery confirmed with photo!'),
+                        backgroundColor: AppTheme.successColor,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  setDialogState(() => isUploading = false);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: isUploading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Confirm Delivery'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              // Update order status to delivered
-              try {
-                // Update orders table (only status - no delivered_at column here)
-                await SupabaseService.client
-                    .from('orders')
-                    .update({'status': 'delivered'})
-                    .eq('id', delivery['order_id']);
-                
-                // Update deliveries table (has delivered_at column)
-                await SupabaseService.client
-                    .from('deliveries')
-                    .update({
-                      'status': 'delivered',
-                      'delivered_at': DateTime.now().toIso8601String(),
-                    })
-                    .eq('id', delivery['id']);
-                
-                // Invalidate providers to refresh dashboard data
-                final String orderId = delivery['order_id'] as String;
-                ref.invalidate(todayDeliveriesProvider);
-                ref.invalidate(deliveryDetailProvider(orderId));
-                
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext);
-                }
-                
-                if (context.mounted) {
-                  context.go('/dashboard');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('✓ Delivery marked as complete!'),
-                      backgroundColor: AppTheme.successColor,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
       ),
     );
   }

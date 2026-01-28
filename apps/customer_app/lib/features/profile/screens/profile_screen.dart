@@ -380,7 +380,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               icon: Icons.help_outline,
               title: 'Help & Support',
               subtitle: 'FAQs, Contact us',
-              onTap: () => _showComingSoonSnackbar('Help & Support'),
+              onTap: () => context.push('/help-support'),
             ),
             _buildMenuItem(
               context,

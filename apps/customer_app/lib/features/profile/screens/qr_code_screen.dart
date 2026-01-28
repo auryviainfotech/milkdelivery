@@ -1,7 +1,11 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
 
@@ -15,6 +19,8 @@ class QrCodeScreen extends ConsumerStatefulWidget {
 
 class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
   double _previousBrightness = 0.5;
+  final GlobalKey _qrKey = GlobalKey();
+  bool _isDownloading = false;
 
   @override
   void initState() {
@@ -35,6 +41,91 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
 
   Future<void> _restoreBrightness() async {
     // Restore brightness when leaving
+  }
+
+  Future<void> _downloadQrCode(String qrData, String? userName) async {
+    if (_isDownloading) return;
+    
+    setState(() => _isDownloading = true);
+    
+    try {
+      // Generate QR image
+      final qrValidationResult = QrValidator.validate(
+        data: qrData,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.M,
+      );
+      
+      if (qrValidationResult.status != QrValidationStatus.valid) {
+        throw Exception('Invalid QR data');
+      }
+      
+      final qrCode = qrValidationResult.qrCode!;
+      final painter = QrPainter.withQr(
+        qr: qrCode,
+        color: const Color(0xFF000000),
+        emptyColor: const Color(0xFFFFFFFF),
+        gapless: true,
+      );
+      
+      // Create image
+      final size = 300.0;
+      final pictureRecorder = ui.PictureRecorder();
+      final canvas = Canvas(pictureRecorder);
+      
+      // Draw white background
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size + 40, size + 40),
+        Paint()..color = Colors.white,
+      );
+      
+      // Draw QR code
+      canvas.translate(20, 20);
+      painter.paint(canvas, Size(size, size));
+      
+      final picture = pictureRecorder.endRecording();
+      final img = await picture.toImage((size + 40).toInt(), (size + 40).toInt());
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      
+      if (byteData == null) {
+        throw Exception('Failed to generate image');
+      }
+      
+      // Save to downloads folder
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = 'MilkDelivery_QR_${userName?.replaceAll(' ', '_') ?? 'code'}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsBytes(byteData.buffer.asUint8List());
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('QR Code saved to: $fileName')),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving QR: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
   }
 
   @override
@@ -244,28 +335,55 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Copy button
-          OutlinedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: profile.qrCode!));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.check, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text('QR code copied to clipboard'),
-                    ],
-                  ),
-                  backgroundColor: Colors.green,
+          // Action buttons
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Copy button
+              OutlinedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: profile.qrCode!));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text('QR code copied to clipboard'),
+                        ],
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 ),
-              );
-            },
-            icon: const Icon(Icons.copy),
-            label: const Text('Copy Code'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
+              ),
+              const SizedBox(width: 16),
+              // Download button
+              FilledButton.icon(
+                onPressed: _isDownloading 
+                    ? null 
+                    : () => _downloadQrCode(profile.qrCode!, profile.fullName),
+                icon: _isDownloading 
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.download),
+                label: Text(_isDownloading ? 'Saving...' : 'Download'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -29,6 +29,12 @@ dependencies:
   # QR Scanner
   mobile_scanner: ^4.0.1
   
+  # Image Picker for photo upload
+  image_picker: ^1.0.7
+  
+  # File Storage
+  path_provider: ^2.1.2
+  
   # Offline Storage
   hive_flutter: ^1.1.0
   
