@@ -39,6 +39,24 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
       final email = _emailController.text.trim().toLowerCase();
       final password = _passwordController.text;
 
+      // First, check if this email exists in profiles with role 'delivery'
+      // This prevents random users from even attempting to authenticate
+      final profileCheck = await SupabaseService.client
+          .from('profiles')
+          .select('id, role, email')
+          .eq('email', email)
+          .maybeSingle();
+
+      if (profileCheck == null) {
+        throw Exception('NOT_REGISTERED');
+      }
+
+      final role = profileCheck['role'];
+      if (role != 'delivery' && role != 'admin') {
+        throw Exception('NOT_DELIVERY_PERSON');
+      }
+
+      // Only proceed with authentication if profile exists and has correct role
       final authResponse = await SupabaseService.client.auth.signInWithPassword(
         email: email,
         password: password,
@@ -49,6 +67,7 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
         throw Exception('Login failed');
       }
 
+      // Fetch full profile data
       final response = await SupabaseService.client
           .from('profiles')
           .select()
@@ -57,13 +76,14 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
 
       if (response == null) {
         await SupabaseService.client.auth.signOut();
-        throw Exception('Delivery account not linked');
+        throw Exception('PROFILE_NOT_LINKED');
       }
 
-      final role = response['role'];
-      if (role != 'delivery' && role != 'admin') {
+      // Double-check role after authentication
+      final userRole = response['role'];
+      if (userRole != 'delivery' && userRole != 'admin') {
         await SupabaseService.client.auth.signOut();
-        throw Exception('Access denied');
+        throw Exception('NOT_DELIVERY_PERSON');
       }
 
       // Store the profile ID for later use
@@ -86,6 +106,7 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
           SnackBar(
             content: Text(_getErrorMessage(e.toString())),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -97,12 +118,18 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
   }
 
   String _getErrorMessage(String error) {
-    if (error.contains('Invalid login credentials')) {
-      return 'Wrong phone number or password';
+    if (error.contains('NOT_REGISTERED')) {
+      return 'You are not registered as a delivery partner. Please contact admin.';
+    } else if (error.contains('NOT_DELIVERY_PERSON')) {
+      return 'Access denied. Only registered delivery partners can login.';
+    } else if (error.contains('PROFILE_NOT_LINKED')) {
+      return 'Account not properly set up. Please contact admin.';
+    } else if (error.contains('Invalid login credentials')) {
+      return 'Wrong email or password. Please try again.';
     } else if (error.contains('Email not confirmed')) {
       return 'Account not activated. Contact admin.';
     }
-    return 'Login failed. Please try again.';
+    return 'Login failed. Please contact admin if the problem persists.';
   }
 
   @override
@@ -227,6 +254,37 @@ class _DeliveryLoginScreenState extends ConsumerState<DeliveryLoginScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Login'),
+                ),
+                const SizedBox(height: 24),
+
+                // Notice box
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: colorScheme.tertiaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: colorScheme.tertiary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: colorScheme.tertiary,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Only registered delivery partners can login. Contact admin if you need access.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 
