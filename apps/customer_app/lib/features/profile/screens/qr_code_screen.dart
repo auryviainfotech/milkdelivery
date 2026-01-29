@@ -229,7 +229,7 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
           ),
           const SizedBox(height: 32),
 
-          // QR Code Card
+          // QR Code Card WITH BUTTONS INSIDE
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -252,7 +252,7 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                 QrImageView(
                   data: profile.qrCode!,
                   version: QrVersions.auto,
-                  size: 240,
+                  size: 200,
                   backgroundColor: Colors.white,
                   eyeStyle: QrEyeStyle(
                     eyeShape: QrEyeShape.square,
@@ -295,20 +295,12 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Action buttons - MOVED UP and made LARGER
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
+                
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 16),
+                
+                // BUTTONS INSIDE THE CARD
                 Text(
                   'Save your QR Code',
                   style: theme.textTheme.titleSmall?.copyWith(
@@ -338,9 +330,9 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                           );
                         },
                         icon: const Icon(Icons.copy),
-                        label: const Text('Copy Code'),
+                        label: const Text('Copy'),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
@@ -363,7 +355,7 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                             : const Icon(Icons.download),
                         label: Text(_isDownloading ? 'Saving...' : 'Download'),
                         style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
                     ),
