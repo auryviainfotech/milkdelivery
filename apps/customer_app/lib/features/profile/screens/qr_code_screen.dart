@@ -192,6 +192,13 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
+            const SizedBox(height: 24),
+            // DEBUG: Test button even when no QR
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.yellow,
+              child: const Text('DEBUG: No QR code in profile', style: TextStyle(color: Colors.black)),
+            ),
           ],
         ),
       );
@@ -309,42 +316,71 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
           
           const SizedBox(height: 24),
 
-          // DOWNLOAD BUTTON - Simple style like login
-          FilledButton(
-            onPressed: _isDownloading 
-                ? null 
-                : () => _downloadQrCode(profile.qrCode!, profile.fullName),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              minimumSize: const Size(double.infinity, 50),
+          // DEBUG: Bright container to verify this section renders
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green.shade100,
+              border: Border.all(color: Colors.green, width: 3),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: _isDownloading 
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Download QR Code', style: TextStyle(fontSize: 16)),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // COPY BUTTON - Simple style
-          OutlinedButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: profile.qrCode!));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('QR code copied to clipboard'),
-                  backgroundColor: Colors.green,
+            child: Column(
+              children: [
+                const Text(
+                  'QR Actions',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
                 ),
-              );
-            },
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              minimumSize: const Size(double.infinity, 50),
+                const SizedBox(height: 16),
+                
+                // DOWNLOAD BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isDownloading 
+                        ? null 
+                        : () => _downloadQrCode(profile.qrCode!, profile.fullName),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: _isDownloading 
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('DOWNLOAD QR CODE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // COPY BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: profile.qrCode!));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('QR code copied to clipboard'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('COPY CODE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Copy Code', style: TextStyle(fontSize: 16)),
           ),
 
           const SizedBox(height: 16),
