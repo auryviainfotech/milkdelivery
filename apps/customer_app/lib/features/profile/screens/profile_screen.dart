@@ -1,9 +1,12 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -17,6 +20,92 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _isDownloadingQr = false;
+
+  Future<void> _downloadQrCode(String qrData, String? userName) async {
+    if (_isDownloadingQr) return;
+    
+    setState(() => _isDownloadingQr = true);
+    
+    try {
+      // Generate QR image
+      final qrValidationResult = QrValidator.validate(
+        data: qrData,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.M,
+      );
+      
+      if (qrValidationResult.status != QrValidationStatus.valid) {
+        throw Exception('Invalid QR data');
+      }
+      
+      final qrCode = qrValidationResult.qrCode!;
+      final painter = QrPainter.withQr(
+        qr: qrCode,
+        color: const Color(0xFF000000),
+        emptyColor: const Color(0xFFFFFFFF),
+        gapless: true,
+      );
+      
+      // Create image
+      const size = 300.0;
+      final pictureRecorder = ui.PictureRecorder();
+      final canvas = Canvas(pictureRecorder);
+      
+      // Draw white background
+      canvas.drawRect(
+        const Rect.fromLTWH(0, 0, size + 40, size + 40),
+        Paint()..color = Colors.white,
+      );
+      
+      // Draw QR code
+      canvas.translate(20, 20);
+      painter.paint(canvas, const Size(size, size));
+      
+      final picture = pictureRecorder.endRecording();
+      final img = await picture.toImage((size + 40).toInt(), (size + 40).toInt());
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      
+      if (byteData == null) {
+        throw Exception('Failed to generate image');
+      }
+      
+      // Save to downloads folder
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = 'MilkDelivery_QR_${userName?.replaceAll(' ', '_') ?? 'code'}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsBytes(byteData.buffer.asUint8List());
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('QR Code saved: $fileName')),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving QR: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloadingQr = false);
+      }
+    }
+  }
   
   void _showEditProfileDialog(UserModel? profile) {
     final nameController = TextEditingController(text: profile?.fullName ?? '');
@@ -368,12 +457,65 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               subtitle: 'Manage notifications',
               onTap: () => context.push('/notifications'),
             ),
-            _buildMenuItem(
-              context,
-              icon: Icons.history,
-              title: 'Transaction History',
-              subtitle: 'View all wallet transactions',
-              onTap: () => context.push('/wallet'),
+            // Download QR Code - Direct button
+            profileAsync.when(
+              data: (profile) {
+                if (profile == null || profile.qrCode == null || profile.qrCode!.isEmpty) {
+                  return _buildMenuItem(
+                    context,
+                    icon: Icons.qr_code_2,
+                    title: 'Download QR Code',
+                    subtitle: 'QR code not available yet',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('QR code will be generated automatically')),
+                      );
+                    },
+                  );
+                }
+                return ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _isDownloadingQr
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download, color: Colors.green),
+                  ),
+                  title: const Text(
+                    'Download QR Code',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    _isDownloadingQr ? 'Saving...' : 'Save QR code to your device',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _isDownloadingQr
+                      ? null
+                      : () => _downloadQrCode(profile.qrCode!, profile.fullName),
+                );
+              },
+              loading: () => _buildMenuItem(
+                context,
+                icon: Icons.download,
+                title: 'Download QR Code',
+                subtitle: 'Loading...',
+                onTap: () {},
+              ),
+              error: (_, __) => _buildMenuItem(
+                context,
+                icon: Icons.download,
+                title: 'Download QR Code',
+                subtitle: 'Error loading',
+                onTap: () {},
+              ),
             ),
             _buildMenuItem(
               context,
