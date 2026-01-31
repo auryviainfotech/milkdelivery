@@ -6,6 +6,8 @@ part 'order_model.g.dart';
 /// Order status
 enum OrderStatus {
   pending,
+  @JsonValue('payment_pending')
+  paymentPending,
   assigned,
   delivered,
   failed,

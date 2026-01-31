@@ -8,6 +8,7 @@ import '../features/dashboard/screens/delivery_dashboard_screen.dart';
 import '../features/route_list/screens/route_list_screen.dart';
 import '../features/delivery_confirm/screens/delivery_confirm_screen.dart';
 import '../features/qr_scanner/screens/qr_scanner_screen.dart';
+import '../features/profile/screens/profile_screen.dart';
 
 /// Delivery App router configuration
 final appRouter = GoRouter(
@@ -70,11 +71,18 @@ final appRouter = GoRouter(
       builder: (context, state) => const DeliveryDashboardScreen(),
     ),
 
-    // Today's route list
+    // Today's route list (Deprecated - kept for history if needed, but UI points to Profile now)
     GoRoute(
       path: '/routes',
       name: 'routes',
       builder: (context, state) => const RouteListScreen(),
+    ),
+
+    // Profile
+    GoRoute(
+      path: '/profile',
+      name: 'profile',
+      builder: (context, state) => const ProfileScreen(),
     ),
 
     // Delivery confirmation

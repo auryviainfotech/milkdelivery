@@ -253,6 +253,7 @@ class _DeliveryDashboardScreenState
                                 ),
                               ),
                               const SizedBox(width: 8),
+                              /* Logout moved to Profile
                               IconButton.filledTonal(
                                 onPressed: () async {
                                   final prefs =
@@ -269,6 +270,7 @@ class _DeliveryDashboardScreenState
                                       colorScheme.surfaceContainerHighest,
                                 ),
                               ),
+                              */
                             ],
                           ),
                         ],
@@ -391,7 +393,7 @@ class _DeliveryDashboardScreenState
               // Already on Dashboard
               break;
             case 1:
-              context.push('/routes');
+              context.push('/profile');
               break;
             case 2:
               _showAdminSupportDialog(context);
@@ -405,9 +407,9 @@ class _DeliveryDashboardScreenState
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.route_outlined),
-            selectedIcon: Icon(Icons.route),
-            label: 'Routes',
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
           ),
           NavigationDestination(
             icon: Icon(Icons.support_agent_outlined),

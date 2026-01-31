@@ -1,0 +1,12 @@
+﻿{
+    "id":  "785ced5e-a328-420a-82bf-00c8d690eadd",
+    "order_id":  "cde79ac7-3a38-4759-8b51-1dc0e9093d79",
+    "delivery_person_id":  "5d5cea4f-030c-464b-8450-c6052a7fcc15",
+    "scheduled_date":  "2026-01-31",
+    "delivered_at":  null,
+    "qr_scanned":  false,
+    "status":  "pending",
+    "issue_notes":  null,
+    "created_at":  "2026-01-30T05:39:46.299154+00:00",
+    "liters_delivered":  0.00
+}

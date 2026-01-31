@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:gal/gal.dart';
 import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
 
@@ -18,30 +17,7 @@ class QrCodeScreen extends ConsumerStatefulWidget {
 }
 
 class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
-  double _previousBrightness = 0.5;
-  final GlobalKey _qrKey = GlobalKey();
   bool _isDownloading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _increaseBrightness();
-  }
-
-  @override
-  void dispose() {
-    _restoreBrightness();
-    super.dispose();
-  }
-
-  Future<void> _increaseBrightness() async {
-    // Note: Screen brightness control would require platform-specific implementation
-    // For now, we'll just show a white background to make scanning easier
-  }
-
-  Future<void> _restoreBrightness() async {
-    // Restore brightness when leaving
-  }
 
   Future<void> _downloadQrCode(String qrData, String? userName) async {
     if (_isDownloading) return;
@@ -49,11 +25,11 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
     setState(() => _isDownloading = true);
     
     try {
-      // Generate QR image
+      // 1. Generate QR Code Image validation
       final qrValidationResult = QrValidator.validate(
         data: qrData,
         version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.M,
+        errorCorrectionLevel: QrErrorCorrectLevel.H,
       );
       
       if (qrValidationResult.status != QrValidationStatus.valid) {
@@ -68,56 +44,89 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
         gapless: true,
       );
       
-      // Create image
-      final size = 300.0;
+      // 2. Create high-res image
+      const double size = 1024;
       final pictureRecorder = ui.PictureRecorder();
       final canvas = Canvas(pictureRecorder);
       
       // Draw white background
-      canvas.drawRect(
-        Rect.fromLTWH(0, 0, size + 40, size + 40),
-        Paint()..color = Colors.white,
+      final bgPaint = Paint()..color = Colors.white;
+      canvas.drawRect(const Rect.fromLTWH(0, 0, size, size), bgPaint);
+      
+      // Draw QR code centered with padding
+      const double padding = 80;
+      const double qrSize = size - (padding * 2);
+      canvas.translate(padding, padding);
+      painter.paint(canvas, const Size(qrSize, qrSize));
+      
+      // Draw text at bottom
+      canvas.translate(-padding, -padding); // Reset transform
+      
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: userName ?? 'Milk Delivery',
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 40,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
       );
       
-      // Draw QR code
-      canvas.translate(20, 20);
-      painter.paint(canvas, Size(size, size));
+      textPainter.layout(minWidth: size, maxWidth: size);
       
+      // Position text at the bottom, centered
+      // We'll place it in the bottom padding area
+      final textY = size - 60; 
+      textPainter.paint(canvas, Offset(0, textY));
+
       final picture = pictureRecorder.endRecording();
-      final img = await picture.toImage((size + 40).toInt(), (size + 40).toInt());
+      final img = await picture.toImage(size.toInt(), size.toInt());
       final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      final Uint8List bytes = byteData!.buffer.asUint8List();
       
-      if (byteData == null) {
-        throw Exception('Failed to generate image');
-      }
-      
-      // Save to downloads folder
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = 'MilkDelivery_QR_${userName?.replaceAll(' ', '_') ?? 'code'}_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File('${directory.path}/$fileName');
-      await file.writeAsBytes(byteData.buffer.asUint8List());
+      // 3. Save to Gallery using Gal
+      await Gal.putImageBytes(
+        bytes,
+        name: 'MilkDelivery_${userName?.replaceAll(' ', '_') ?? 'QR'}',
+      );
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(child: Text('QR Code saved to: $fileName')),
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('QR Code saved to Gallery!'),
               ],
             ),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
+      debugPrint('QR Download Error: $e');
       if (mounted) {
+        String message = 'Error saving QR: $e';
+        if (e.toString().contains('ACCESS_DENIED')) {
+          message = 'Permission denied. Please allow access to photos.';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error saving QR: $e'),
+            content: Text(message),
             backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () async {
+                 await Gal.open();
+              },
+            ),
           ),
         );
       }
@@ -192,13 +201,6 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
-            const SizedBox(height: 24),
-            // DEBUG: Test button even when no QR
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.yellow,
-              child: const Text('DEBUG: No QR code in profile', style: TextStyle(color: Colors.black)),
-            ),
           ],
         ),
       );
@@ -236,7 +238,7 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
           ),
           const SizedBox(height: 32),
 
-          // QR Code Card WITH BUTTONS INSIDE
+          // QR Code Card
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -265,7 +267,7 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                     eyeShape: QrEyeShape.square,
                     color: colorScheme.primary,
                   ),
-                  dataModuleStyle: QrDataModuleStyle(
+                  dataModuleStyle: const QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
                     color: Colors.black87,
                   ),
@@ -310,110 +312,75 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-
-          // DEBUG: Bright container to verify this section renders
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green.shade100,
-              border: Border.all(color: Colors.green, width: 3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'QR Actions',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-                const SizedBox(height: 16),
-                
-                // DOWNLOAD BUTTON
+                const SizedBox(height: 24),
+                // BUTTONS INSIDE CARD
                 SizedBox(
                   width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
+                  height: 50,
+                  child: ElevatedButton.icon(
                     onPressed: _isDownloading 
                         ? null 
                         : () => _downloadQrCode(profile.qrCode!, profile.fullName),
+                    icon: _isDownloading 
+                        ? const SizedBox(
+                            width: 18, 
+                            height: 18, 
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
+                          )
+                        : const Icon(Icons.download, size: 20),
+                    label: Text(_isDownloading ? 'Saving...' : 'Save to Gallery'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: colorScheme.primary,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
                     ),
-                    child: _isDownloading 
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('DOWNLOAD QR CODE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
-                
-                const SizedBox(height: 12),
-                
-                // COPY BUTTON
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
+                  height: 50,
+                  child: OutlinedButton.icon(
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: profile.qrCode!));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('QR code copied to clipboard'),
+                          content: Text('QR code copied!'),
                           backgroundColor: Colors.green,
                         ),
                       );
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('COPY CODE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.copy, size: 20),
+                    label: const Text('Copy Code'),
                   ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
           // Instructions
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+              color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Column(
+            child: Row(
               children: [
                 Icon(
                   Icons.info_outline,
                   color: colorScheme.primary,
-                  size: 28,
+                  size: 24,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'How to use',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Show this QR code to the delivery person to confirm your delivery.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Show this QR code to the delivery person when they arrive. They will scan it to confirm your milk delivery.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),

@@ -37,6 +37,7 @@ Map<String, dynamic> _$$OrderModelImplToJson(_$OrderModelImpl instance) =>
 
 const _$OrderStatusEnumMap = {
   OrderStatus.pending: 'pending',
+  OrderStatus.paymentPending: 'payment_pending',
   OrderStatus.assigned: 'assigned',
   OrderStatus.delivered: 'delivered',
   OrderStatus.failed: 'failed',

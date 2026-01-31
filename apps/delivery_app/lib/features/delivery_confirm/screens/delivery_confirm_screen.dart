@@ -397,17 +397,23 @@ class DeliveryConfirmScreen extends ConsumerWidget {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          scrollable: true,
           title: Row(
             children: [
               Icon(Icons.camera_alt, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 8),
-              const Text('Upload Delivery Photo'),
+              const Expanded(
+                child: Text(
+                  'Upload Photo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
                 const Text(
                   'Take a photo of the delivered milk as proof of delivery.',
                   style: TextStyle(fontSize: 14),
@@ -492,7 +498,6 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
           actions: [
             TextButton(
               onPressed: isUploading ? null : () => Navigator.pop(dialogContext),

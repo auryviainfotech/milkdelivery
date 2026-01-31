@@ -49,19 +49,36 @@ final oneTimeProductsProvider = FutureProvider<List<ProductModel>>((ref) async {
 /// Provider for user's orders
 final ordersProvider = FutureProvider<List<OrderModel>>((ref) async {
   final user = SupabaseService.currentUser;
-  if (user == null) return [];
-  
-  final response = await SupabaseService.client
-      .from('orders')
-      .select()
-      .eq('user_id', user.id)
-      .order('delivery_date', ascending: false);
+  debugPrint('🔍 [ORDERS] Current user: ${user?.id}');
+  if (user == null) {
+    debugPrint('🔍 [ORDERS] No user logged in, returning empty');
+    return [];
+  }
   
   try {
-    return (response as List).map((json) {
-      return OrderModel.fromJson(json);
-    }).toList();
+    final response = await SupabaseService.client
+        .from('orders')
+        .select()
+        .eq('user_id', user.id)
+        .order('delivery_date', ascending: false);
+    
+    debugPrint('🔍 [ORDERS] Raw response count: ${(response as List).length}');
+    debugPrint('🔍 [ORDERS] Raw response: $response');
+    
+    final orders = <OrderModel>[];
+    for (final json in (response as List)) {
+      try {
+        orders.add(OrderModel.fromJson(json));
+      } catch (e) {
+        debugPrint('🔍 [ORDERS] Failed to parse order: $e');
+        debugPrint('🔍 [ORDERS] Problematic JSON: $json');
+      }
+    }
+    
+    debugPrint('🔍 [ORDERS] Successfully parsed ${orders.length} orders');
+    return orders;
   } catch (e) {
+    debugPrint('🔍 [ORDERS] Error fetching orders: $e');
     return [];
   }
 });
@@ -76,6 +93,24 @@ final activeSubscriptionsProvider = FutureProvider<List<SubscriptionModel>>((ref
       .select()
       .eq('user_id', user.id)
       .eq('status', 'active')
+      .order('created_at', ascending: false);
+  
+  return (response as List)
+      .map((json) => SubscriptionModel.fromJson(json))
+      .toList();
+});
+
+/// Provider for user's ALL subscriptions (active + pending)
+/// Used in Orders screen to show subscription status
+final allSubscriptionsProvider = FutureProvider<List<SubscriptionModel>>((ref) async {
+  final user = SupabaseService.currentUser;
+  if (user == null) return [];
+  
+  final response = await SupabaseService.client
+      .from('subscriptions')
+      .select()
+      .eq('user_id', user.id)
+      .filter('status', 'in', '("active","pending")')
       .order('created_at', ascending: false);
   
   return (response as List)

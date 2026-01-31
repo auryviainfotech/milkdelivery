@@ -1,0 +1,22 @@
+﻿[
+    {
+        "id":  "1aa2a0a9-4772-474b-bef2-b5fc36077919",
+        "full_name":  "Prem",
+        "liters_remaining":  30.00
+    },
+    {
+        "id":  "fe369b22-6eb2-46b7-8532-64f12c768453",
+        "full_name":  "Shanti Sharma",
+        "liters_remaining":  0.00
+    },
+    {
+        "id":  "0c30c684-192f-489b-bceb-d2c69b7680d8",
+        "full_name":  "Sathwik",
+        "liters_remaining":  30.00
+    },
+    {
+        "id":  "847f832a-0bc0-4cf0-a50e-75bab96b35f8",
+        "full_name":  "Hafsiya",
+        "liters_remaining":  14.00
+    }
+]

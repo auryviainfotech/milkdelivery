@@ -4,16 +4,21 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:milk_core/milk_core.dart';
 
 /// QR code scanner screen for delivery verification
-class QrScannerScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../dashboard/screens/delivery_dashboard_screen.dart';
+import '../../delivery_confirm/screens/delivery_confirm_screen.dart';
+
+/// QR code scanner screen for delivery verification
+class QrScannerScreen extends ConsumerStatefulWidget {
   final String orderId;
 
   const QrScannerScreen({super.key, required this.orderId});
 
   @override
-  State<QrScannerScreen> createState() => _QrScannerScreenState();
+  ConsumerState<QrScannerScreen> createState() => _QrScannerScreenState();
 }
 
-class _QrScannerScreenState extends State<QrScannerScreen> {
+class _QrScannerScreenState extends ConsumerState<QrScannerScreen> {
   MobileScannerController? _controller;
   bool _isScanned = false;
   String? _scannedCustomerId;
@@ -66,6 +71,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             size: 64,
           ),
           title: const Text('QR Verified!'),
+          scrollable: true,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -176,23 +182,54 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         }
       }
 
+      // First, get the delivery record to find the actual order_id
+      // Note: widget.orderId is actually the DELIVERY ID (due to routing naming)
+      final deliveryId = widget.orderId;
+      debugPrint('🔍 [DEBUG] Starting delivery confirmation for deliveryId: $deliveryId');
+      
+      final deliveryRecord = await SupabaseService.client
+          .from('deliveries')
+          .select('order_id')
+          .eq('id', deliveryId)
+          .single();
+      
+      final actualOrderId = deliveryRecord['order_id'] as String;
+      debugPrint('🔍 [DEBUG] Found actualOrderId: $actualOrderId');
+
       // Deduct liters from customer's quota
+      debugPrint('🔍 [DEBUG] Deducting liters from customer: $_scannedCustomerId');
       await SupabaseService.client.from('profiles').update({
         'liters_remaining': currentLiters - liters,
       }).eq('id', _scannedCustomerId!);
 
-      // Update delivery record
+      // Update delivery record (using delivery ID)
+      debugPrint('🔍 [DEBUG] Updating delivery record with status=delivered');
       await SupabaseService.client.from('deliveries').update({
         'status': 'delivered',
         'delivered_at': DateTime.now().toIso8601String(),
         'qr_scanned': true,
         'liters_delivered': liters,
-      }).eq('order_id', widget.orderId);
+      }).eq('id', deliveryId);
+      debugPrint('🔍 [DEBUG] Delivery update executed');
 
-      // Update order status
+      // Update order status (using actual order ID)
+      debugPrint('🔍 [DEBUG] Updating order record with status=delivered');
       await SupabaseService.client
           .from('orders')
-          .update({'status': 'delivered'}).eq('id', widget.orderId);
+          .update({'status': 'delivered'}).eq('id', actualOrderId);
+      debugPrint('🔍 [DEBUG] Order update executed');
+      
+      // Verify the updates actually happened by querying
+      final verifyDelivery = await SupabaseService.client
+          .from('deliveries')
+          .select('status')
+          .eq('id', deliveryId)
+          .maybeSingle();
+      debugPrint('🔍 [DEBUG] Verify delivery status: ${verifyDelivery?['status']}');
+      
+      if (verifyDelivery == null || verifyDelivery['status'] != 'delivered') {
+        throw Exception('Delivery update failed - status is still ${verifyDelivery?['status'] ?? 'unknown'}');
+      }
 
       // Get product name from order for notification
       String productName = 'Milk';
@@ -201,7 +238,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             .from('orders')
             .select(
                 'subscription_id, subscriptions!orders_subscription_id_fkey(product_id, products!subscriptions_product_id_fkey(name))')
-            .eq('id', widget.orderId)
+            .eq('id', actualOrderId)
             .maybeSingle();
 
         if (orderData != null) {
@@ -224,16 +261,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         'body':
             '$productName (${liters.toStringAsFixed(1)}L) delivered. You have ${newLitersRemaining.toStringAsFixed(1)}L remaining.',
         'type': 'deliveryUpdate',
-        'data': {
-          'order_id': widget.orderId,
-          'liters_delivered': liters,
-          'liters_remaining': newLitersRemaining,
-          'product_name': productName,
-        },
       });
+      
+      // Invalidate providers to force refresh (with small delay for DB propagation)
+      await Future.delayed(const Duration(milliseconds: 500));
+      ref.invalidate(todayDeliveriesProvider);
+      ref.invalidate(deliveryDetailProvider(widget.orderId));
 
       if (mounted) {
-        context.go('/routes');
+        context.go('/dashboard'); // Changed from /routes to /dashboard
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
