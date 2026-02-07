@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app/router.dart';
 import 'services/offline_service.dart';
+import 'app/providers/theme_provider.dart';
 
 void main() async {
   try {
@@ -66,17 +67,19 @@ void main() async {
   }
 }
 
-class MilkDeliveryApp extends StatelessWidget {
+class MilkDeliveryApp extends ConsumerWidget {
   const MilkDeliveryApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+
     return MaterialApp.router(
       title: 'Milk Delivery - Driver',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       routerConfig: appRouter,
     );
   }

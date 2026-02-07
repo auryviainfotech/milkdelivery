@@ -1,10 +1,7 @@
-import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:gal/gal.dart';
 import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
 
@@ -17,125 +14,6 @@ class QrCodeScreen extends ConsumerStatefulWidget {
 }
 
 class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
-  bool _isDownloading = false;
-
-  Future<void> _downloadQrCode(String qrData, String? userName) async {
-    if (_isDownloading) return;
-    
-    setState(() => _isDownloading = true);
-    
-    try {
-      // 1. Generate QR Code Image validation
-      final qrValidationResult = QrValidator.validate(
-        data: qrData,
-        version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.H,
-      );
-      
-      if (qrValidationResult.status != QrValidationStatus.valid) {
-        throw Exception('Invalid QR data');
-      }
-      
-      final qrCode = qrValidationResult.qrCode!;
-      final painter = QrPainter.withQr(
-        qr: qrCode,
-        color: const Color(0xFF000000),
-        emptyColor: const Color(0xFFFFFFFF),
-        gapless: true,
-      );
-      
-      // 2. Create high-res image
-      const double size = 1024;
-      final pictureRecorder = ui.PictureRecorder();
-      final canvas = Canvas(pictureRecorder);
-      
-      // Draw white background
-      final bgPaint = Paint()..color = Colors.white;
-      canvas.drawRect(const Rect.fromLTWH(0, 0, size, size), bgPaint);
-      
-      // Draw QR code centered with padding
-      const double padding = 80;
-      const double qrSize = size - (padding * 2);
-      canvas.translate(padding, padding);
-      painter.paint(canvas, const Size(qrSize, qrSize));
-      
-      // Draw text at bottom
-      canvas.translate(-padding, -padding); // Reset transform
-      
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: userName ?? 'Milk Delivery',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 40,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
-      );
-      
-      textPainter.layout(minWidth: size, maxWidth: size);
-      
-      // Position text at the bottom, centered
-      // We'll place it in the bottom padding area
-      final textY = size - 60; 
-      textPainter.paint(canvas, Offset(0, textY));
-
-      final picture = pictureRecorder.endRecording();
-      final img = await picture.toImage(size.toInt(), size.toInt());
-      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-      final Uint8List bytes = byteData!.buffer.asUint8List();
-      
-      // 3. Save to Gallery using Gal
-      await Gal.putImageBytes(
-        bytes,
-        name: 'MilkDelivery_${userName?.replaceAll(' ', '_') ?? 'QR'}',
-      );
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Text('QR Code saved to Gallery!'),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('QR Download Error: $e');
-      if (mounted) {
-        String message = 'Error saving QR: $e';
-        if (e.toString().contains('ACCESS_DENIED')) {
-          message = 'Permission denied. Please allow access to photos.';
-        }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.red,
-            action: SnackBarAction(
-              label: 'Settings',
-              textColor: Colors.white,
-              onPressed: () async {
-                 await Gal.open();
-              },
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isDownloading = false);
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -313,29 +191,7 @@ class _QrCodeScreenState extends ConsumerState<QrCodeScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // BUTTONS INSIDE CARD
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _isDownloading 
-                        ? null 
-                        : () => _downloadQrCode(profile.qrCode!, profile.fullName),
-                    icon: _isDownloading 
-                        ? const SizedBox(
-                            width: 18, 
-                            height: 18, 
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
-                          )
-                        : const Icon(Icons.download, size: 20),
-                    label: Text(_isDownloading ? 'Saving...' : 'Save to Gallery'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.primary,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                // Copy Code Button
                 SizedBox(
                   width: double.infinity,
                   height: 50,

@@ -13,7 +13,7 @@ class OrdersScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final ordersAsync = ref.watch(ordersProvider);
-    final subscriptionsAsync = ref.watch(allSubscriptionsProvider);
+    final subscriptionsAsync = ref.watch(activeSubscriptionsProvider);
     final productsAsync = ref.watch(productsProvider);
 
     return SafeArea(
@@ -28,15 +28,20 @@ class OrdersScreen extends ConsumerWidget {
                 bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    'Orders & Subscriptions',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Orders & Subscriptions',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -45,7 +50,7 @@ class OrdersScreen extends ConsumerWidget {
             child: RefreshIndicator(
               onRefresh: () async {
                 ref.invalidate(ordersProvider);
-                ref.invalidate(allSubscriptionsProvider);
+                ref.invalidate(activeSubscriptionsProvider);
                 ref.invalidate(productsProvider);
               },
               child: ordersAsync.when(
@@ -68,11 +73,18 @@ class OrdersScreen extends ConsumerWidget {
                                       color: colorScheme.onSurfaceVariant,
                                     ),
                                   ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'User: ${SupabaseService.currentUser?.id ?? "Not logged in"}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+                                    ),
+                                  ),
                                   const SizedBox(height: 16),
                                   ElevatedButton.icon(
                                     onPressed: () {
                                       ref.invalidate(ordersProvider);
-                                      ref.invalidate(allSubscriptionsProvider);
+                                      ref.invalidate(activeSubscriptionsProvider);
                                     },
                                     icon: const Icon(Icons.refresh),
                                     label: const Text('Refresh'),
@@ -233,7 +245,7 @@ class OrdersScreen extends ConsumerWidget {
   Widget _buildOrderCard(BuildContext context, OrderModel order) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isDelivered = order.status == OrderStatus.delivered;
+    final isDelivered = order.status == OrderStatus.delivered || order.status == OrderStatus.paymentPending;
     
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -270,17 +282,42 @@ class OrdersScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        order.subscriptionId != null ? 'Daily Delivery' : 'Shop Order',
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                      if (order.totalAmount > 0)
-                      Text(
-                        '₹${order.totalAmount}',
-                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                      if (order.items != null && order.items!.isNotEmpty) ...[
+                        ...order.items!.map((item) {
+                          final product = item.product;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              children: [
+                                Text('${product?.emoji ?? '📦'} ', style: const TextStyle(fontSize: 16)),
+                                Expanded(
+                                  child: Text(
+                                    '${product?.name ?? 'Unknown Product'} x ${item.quantity}',
+                                    style: theme.textTheme.bodyMedium,
+                                  ),
+                                ),
+                                Text(
+                                  '₹${(item.price * item.quantity).toStringAsFixed(0)}',
+                                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Total: ₹${order.totalAmount?.toStringAsFixed(0) ?? '0'}',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
+                      ] else
+                        Text(
+                          order.subscriptionId != null ? 'Daily Delivery' : 'Shop Order',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+
                     ],
                   ),
                 ),
@@ -318,19 +355,28 @@ class OrdersScreen extends ConsumerWidget {
     switch (status.toLowerCase()) {
       case 'pending':
         color = Colors.orange;
+        label = 'Pending';
       case 'active':
-      case 'delivered':
         color = Colors.green;
+        label = 'Active';
+      case 'delivered':
+      case 'paymentpending':
+        color = Colors.green;
+        label = 'Delivered';
       case 'assigned':
         color = Colors.blue;
+        label = 'Assigned';
       case 'failed':
       case 'cancelled':
       case 'expired':
         color = Colors.red;
+        label = status[0].toUpperCase() + status.substring(1);
       case 'paused':
         color = Colors.grey;
+        label = 'Paused';
       default:
         color = Colors.blue;
+        label = status[0].toUpperCase() + status.substring(1);
     }
 
     return Chip(

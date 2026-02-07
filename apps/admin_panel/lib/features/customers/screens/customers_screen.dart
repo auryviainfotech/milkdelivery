@@ -153,7 +153,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     final customerLiters = litersData[id];
                     final litersRemaining = customerLiters?['liters'] ?? 0.0;
                     final subStatus = customerLiters?['status'] ?? 'inactive';
-                    final hasLocation = customer['latitude'] != null && customer['longitude'] != null;
+                    final hasGpsLocation = customer['latitude'] != null && customer['longitude'] != null;
+                    final address = customer['address'] ?? '';
+                    final hasAddress = address.isNotEmpty;
                     
                     return DataRow2(
                       cells: [
@@ -191,10 +193,20 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                           ),
                         ),
                         DataCell(
-                          Icon(
-                            hasLocation ? Icons.location_on : Icons.location_off,
-                            color: hasLocation ? AppTheme.successColor : Colors.grey,
-                            size: 20,
+                          Tooltip(
+                            message: hasAddress ? address : 'No address',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  hasAddress ? Icons.location_on : Icons.location_off,
+                                  color: hasAddress ? AppTheme.successColor : Colors.grey,
+                                  size: 18,
+                                ),
+                                if (hasGpsLocation)
+                                  const Icon(Icons.gps_fixed, size: 14, color: Colors.blue),
+                              ],
+                            ),
                           ),
                         ),
                         DataCell(
@@ -206,9 +218,19 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                                 tooltip: 'View Details',
                               ),
                               IconButton(
+                                onPressed: () => _editCustomer(customer),
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: 'Edit',
+                              ),
+                              IconButton(
                                 onPressed: () => _addLiters(customer),
                                 icon: const Icon(Icons.water_drop_outlined),
                                 tooltip: 'Add Liters',
+                              ),
+                              IconButton(
+                                onPressed: () => _deleteCustomer(customer),
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                tooltip: 'Delete',
                               ),
                             ],
                           ),
@@ -311,6 +333,159 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                 Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteCustomer(Map<String, dynamic> customer) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Customer?'),
+        content: Text(
+          'Are you sure you want to delete "${customer['full_name']}"?\n\n'
+          'This will also delete all their subscriptions and orders.\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed != true) return;
+    
+    try {
+      final userId = customer['id'];
+      
+      // Delete related data first (subscriptions)
+      await SupabaseService.client
+          .from('subscriptions')
+          .delete()
+          .eq('user_id', userId);
+      
+      // Delete the profile
+      await SupabaseService.client
+          .from('profiles')
+          .delete()
+          .eq('id', userId);
+      
+      if (mounted) {
+        ref.invalidate(customersProvider);
+        ref.invalidate(customerSubscriptionsProvider);
+        ref.invalidate(customerLitersProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Customer deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _editCustomer(Map<String, dynamic> customer) {
+    final nameController = TextEditingController(text: customer['full_name'] ?? '');
+    final phoneController = TextEditingController(text: customer['phone'] ?? '');
+    final addressController = TextEditingController(text: customer['address'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Edit - ${customer['full_name'] ?? 'Customer'}'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone',
+                    prefixIcon: Icon(Icons.phone),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: addressController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    prefixIcon: Icon(Icons.location_on),
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await SupabaseService.client
+                    .from('profiles')
+                    .update({
+                      'full_name': nameController.text.trim(),
+                      'phone': phoneController.text.trim(),
+                      'address': addressController.text.trim(),
+                    })
+                    .eq('id', customer['id']);
+                
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+                
+                if (mounted) {
+                  ref.invalidate(customersProvider);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Customer updated successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
           ),
         ],
       ),

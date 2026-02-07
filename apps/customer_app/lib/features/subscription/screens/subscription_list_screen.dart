@@ -391,6 +391,19 @@ class _SubscriptionListScreenState extends ConsumerState<SubscriptionListScreen>
       // Get selected product
       final product = _products.firstWhere((p) => p['id'] == _selectedProductId);
       
+      // Check if user already has an active or pending subscription for this product
+      final existingSubscription = await SupabaseService.client
+          .from('subscriptions')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('product_id', _selectedProductId!)
+          .inFilter('status', ['active', 'pending'])
+          .maybeSingle();
+      
+      if (existingSubscription != null) {
+        throw Exception('You already have an ${existingSubscription['status']} subscription for this product. Please cancel or modify the existing one.');
+      }
+      
       // Create subscription request (status = pending)
       final startDate = DateTime.now().add(const Duration(days: 1));
       final endDate = startDate.add(const Duration(days: 30));

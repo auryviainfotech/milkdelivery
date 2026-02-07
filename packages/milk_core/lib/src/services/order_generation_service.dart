@@ -57,8 +57,18 @@ class OrderGenerationService {
         
         if (userId == null) continue;
         
-        // Skip paused subscriptions
-        if (isPaused) continue;
+        // Skip paused or inactive subscriptions (This is critical: Trigger sets status='paused' on 0 liters)
+        if (isPaused || sub['status'] == 'paused' || sub['status'] == 'inactive') {
+          print('Skipping subscription ${sub['id']}: Status is ${sub['status']} (Paused/Inactive)');
+          continue;
+        }
+
+        // Double check status from profile (just in case)
+        final subscriptionStatus = profile?['subscription_status'];
+        if (subscriptionStatus == 'inactive' || subscriptionStatus == 'paused') {
+           print('Skipping subscription ${sub['id']}: Profile subscription_status is $subscriptionStatus');
+           continue;
+        }
 
         // Skip if product doesn't exist anymore
         if (productId != null && !productPrices.containsKey(productId)) {

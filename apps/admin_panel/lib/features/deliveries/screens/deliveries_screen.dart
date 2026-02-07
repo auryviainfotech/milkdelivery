@@ -46,8 +46,11 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // Filter row
-            Row(
+            // Filter row - responsive
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
               children: [
                 // Status filters
                 Wrap(
@@ -59,7 +62,6 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                     _buildFilterChip('Issues', 'issue'),
                   ],
                 ),
-                const Spacer(),
                 // Date filter
                 SegmentedButton<String>(
                   segments: const [
@@ -84,16 +86,32 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                 final delivered = filtered.where((d) => d['status'] == 'delivered').length;
                 final issues = filtered.where((d) => d['status'] == 'issue').length;
 
-                return Row(
-                  children: [
-                    _buildStatCard('Total', filtered.length, Icons.local_shipping, colorScheme.primary),
-                    const SizedBox(width: 16),
-                    _buildStatCard('Pending', pending, Icons.pending_actions, AppTheme.warningColor),
-                    const SizedBox(width: 16),
-                    _buildStatCard('Delivered', delivered, Icons.check_circle, AppTheme.successColor),
-                    const SizedBox(width: 16),
-                    _buildStatCard('Issues', issues, Icons.error_outline, AppTheme.errorColor),
-                  ],
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isSmall = constraints.maxWidth < 700;
+                    return Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        SizedBox(
+                          width: isSmall ? constraints.maxWidth : (constraints.maxWidth - 48) / 4,
+                          child: _buildStatCardSimple('Total', filtered.length, Icons.local_shipping, colorScheme.primary),
+                        ),
+                        SizedBox(
+                          width: isSmall ? constraints.maxWidth : (constraints.maxWidth - 48) / 4,
+                          child: _buildStatCardSimple('Pending', pending, Icons.pending_actions, AppTheme.warningColor),
+                        ),
+                        SizedBox(
+                          width: isSmall ? constraints.maxWidth : (constraints.maxWidth - 48) / 4,
+                          child: _buildStatCardSimple('Delivered', delivered, Icons.check_circle, AppTheme.successColor),
+                        ),
+                        SizedBox(
+                          width: isSmall ? constraints.maxWidth : (constraints.maxWidth - 48) / 4,
+                          child: _buildStatCardSimple('Issues', issues, Icons.error_outline, AppTheme.errorColor),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
               loading: () => const SizedBox.shrink(),
@@ -252,31 +270,31 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
     );
   }
 
-  Widget _buildStatCard(String label, int count, IconData icon, Color color) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 24),
+  Widget _buildStatCardSimple(String label, int count, IconData icon, Color color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(width: 16),
-              Column(
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Flexible(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('$count', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-                  Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

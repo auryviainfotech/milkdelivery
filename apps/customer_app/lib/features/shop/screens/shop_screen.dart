@@ -41,10 +41,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
       final user = SupabaseService.currentUser;
       if (user == null) throw Exception('Not logged in');
 
-      // Get user address
+      // Get user profile (select all to avoid column-not-exists errors)
       final profile = await SupabaseService.client
           .from('profiles')
-          .select('address')
+          .select()
           .eq('id', user.id)
           .maybeSingle();
 
@@ -60,9 +60,12 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
       }
 
       // Create the order with COD payment method
+      final deliveryDateStr = DateTime.now().toIso8601String().split('T')[0];
+      debugPrint('🛒 [SHOP] Calculated Delivery Date: $deliveryDateStr (Local: ${DateTime.now()})');
+
       final orderResponse = await SupabaseService.client.from('orders').insert({
         'user_id': user.id,
-        'delivery_date': DateTime.now().add(const Duration(days: 1)).toIso8601String().split('T')[0],
+        'delivery_date': deliveryDateStr,  // Same day for testing
         'status': 'pending',
         'order_type': 'one_time',
         'payment_method': 'cod',
@@ -86,6 +89,13 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           });
         }
       }
+
+      // Note: Delivery assignment is now done manually by admin via Admin Panel
+      // The shop order will appear in Admin Panel > Shop Orders for assignment
+      debugPrint('✅ [SHOP] Order created: $orderId. Admin will assign delivery person.');
+      
+      // Invalidate orders provider so it shows immediately in orders list
+      ref.invalidate(ordersProvider);
 
       if (mounted) {
         setState(() {
@@ -191,126 +201,38 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
             );
           }
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.62,
-            ),
-            itemCount: products.length,
-            itemBuilder: (context, index) {
-              final product = products[index];
-              final productId = product.id;
-              final quantity = _cart[productId] ?? 0;
+          // Separate products into sections
+          final milkProducts = products.where((p) => p.category == 'subscription').toList();
+          final otherProducts = products.where((p) => p.category != 'subscription').toList();
 
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                        child: Text(
-                          product.emoji,
-                          style: const TextStyle(fontSize: 32),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        product.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        product.unit,
-                        style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
-                      ),
-                      const Spacer(),
-                      // Price and Add button row
-                      Row(
-                        children: [
-                          Text(
-                            '₹${product.price.toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.primary,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (quantity == 0)
-                            GestureDetector(
-                              onTap: () => setState(() => _cart[productId] = 1),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'Add',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
-                                ),
-                              ),
-                            )
-                          else
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      if (quantity > 1) {
-                                        _cart[productId] = quantity - 1;
-                                      } else {
-                                        _cart.remove(productId);
-                                      }
-                                    });
-                                  },
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primaryContainer,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Icon(Icons.remove, size: 14, color: colorScheme.onPrimaryContainer),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  child: Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                ),
-                                GestureDetector(
-                                  onTap: () => setState(() => _cart[productId] = quantity + 1),
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.primaryContainer,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Icon(Icons.add, size: 14, color: colorScheme.onPrimaryContainer),
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ],
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (milkProducts.isNotEmpty) ...[
+                Text(
+                  'Extra Milk (One-Time)',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
                   ),
                 ),
-              );
-            },
+                const SizedBox(height: 8),
+                _buildProductGrid(milkProducts, colorScheme),
+                const SizedBox(height: 24),
+              ],
+              
+              if (otherProducts.isNotEmpty) ...[
+                Text(
+                  'Groceries & Others',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                 const SizedBox(height: 8),
+                _buildProductGrid(otherProducts, colorScheme),
+              ],
+            ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -381,6 +303,131 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildProductGrid(List<ProductModel> products, ColorScheme colorScheme) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.62,
+      ),
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        final product = products[index];
+        final productId = product.id;
+        final quantity = _cart[productId] ?? 0;
+
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Text(
+                    product.emoji,
+                    style: const TextStyle(fontSize: 32),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  product.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  product.unit,
+                  style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
+                ),
+                const Spacer(),
+                // Price and Add button row
+                Row(
+                  children: [
+                    Text(
+                      '₹${product.price.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (quantity == 0)
+                      GestureDetector(
+                        onTap: () => setState(() => _cart[productId] = 1),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Add',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (quantity > 1) {
+                                  _cart[productId] = quantity - 1;
+                                } else {
+                                  _cart.remove(productId);
+                                }
+                              });
+                            },
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Icon(Icons.remove, size: 14, color: colorScheme.onPrimaryContainer),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() => _cart[productId] = quantity + 1),
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Icon(Icons.add, size: 14, color: colorScheme.onPrimaryContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

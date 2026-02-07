@@ -1,15 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/shop_order_card.dart';
 
-/// Provider for current delivery person's ID from SharedPreferences
+/// Provider for current delivery person's ID
 final deliveryPersonIdProvider = FutureProvider<String?>((ref) async {
+  // Primary source: Authenticated Supabase User
+  final authUser = SupabaseService.currentUser;
+  if (authUser != null) {
+    debugPrint('🔐 [PROVIDER] Using Auth User ID: ${authUser.id}');
+    return authUser.id;
+  }
+  
+  // Fallback: SharedPreferences
   final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('delivery_person_id');
+  final prefId = prefs.getString('delivery_person_id');
+  debugPrint('💾 [PROVIDER] Using Prefs ID: $prefId');
+  return prefId;
 });
 
 /// Provider for current delivery person's profile
@@ -49,6 +61,7 @@ Future<List<Map<String, dynamic>>> _fetchDeliveriesForDate(
 ) async {
   try {
     // First, get deliveries
+    debugPrint('🔍 [DELIVERY] Fetching deliveries for person=$personId date=$dateStr');
     final deliveries = await SupabaseService.client
         .from('deliveries')
         .select('*')
@@ -56,7 +69,20 @@ Future<List<Map<String, dynamic>>> _fetchDeliveriesForDate(
         .eq('scheduled_date', dateStr)
         .order('created_at');
 
-    if (deliveries.isEmpty) return [];
+    debugPrint('🔍 [DELIVERY] Found ${deliveries.length} deliveries');
+    
+    if (deliveries.isEmpty) {
+      // Debug: check if there are ANY deliveries for this date (regardless of person)
+      final allDeliveries = await SupabaseService.client
+          .from('deliveries')
+          .select('id, delivery_person_id, scheduled_date, status')
+          .eq('scheduled_date', dateStr);
+      debugPrint('🔍 [DELIVERY] Total deliveries for $dateStr (all persons): ${allDeliveries.length}');
+      for (final d in allDeliveries) {
+        debugPrint('🔍 [DELIVERY]   id=${d['id']}, person=${d['delivery_person_id']}, status=${d['status']}');
+      }
+      return [];
+    }
 
     // Get unique order IDs
     final orderIds = deliveries
@@ -69,24 +95,88 @@ Future<List<Map<String, dynamic>>> _fetchDeliveriesForDate(
       return List<Map<String, dynamic>>.from(deliveries);
     }
 
-    // Fetch orders with nested profiles and subscriptions
-    // Use !fk_name syntax for explicit foreign key reference
-    final orders = await SupabaseService.client
-        .from('orders')
-        .select('''
-          *,
-          profiles!orders_user_id_fkey (full_name, phone, address),
-          subscriptions (
-            id, product_id, delivery_slot, quantity,
-            products (id, name, unit, image_url)
-          )
-        ''')
-        .inFilter('id', orderIds);
+    // Fetch orders with nested data
+    // NOTE: Using separate queries to avoid FK hint issues
+    List<dynamic> orders = [];
+    try {
+      orders = await SupabaseService.client
+          .from('orders')
+          .select('''
+            *,
+            order_items (
+              id, product_id, quantity, price,
+              products (id, name, unit, image_url, emoji)
+            )
+          ''')
+          .inFilter('id', orderIds);
+      debugPrint('🔍 [DELIVERY] Fetched ${orders.length} orders');
+    } catch (e) {
+      debugPrint('🔍 [DELIVERY] Error fetching orders: $e');
+    }
 
-    // Create a map for quick lookup
+    // Fetch profiles for each order's user_id separately (avoids FK hint issues)
+    final userIds = orders
+        .map((o) => o['user_id'] as String?)
+        .where((id) => id != null)
+        .toSet()
+        .toList();
+    
+    Map<String, Map<String, dynamic>> profilesMap = {};
+    if (userIds.isNotEmpty) {
+      try {
+        final profiles = await SupabaseService.client
+            .from('profiles')
+            .select('id, full_name, phone, address')
+            .inFilter('id', userIds);
+        for (final p in profiles) {
+          profilesMap[p['id'] as String] = Map<String, dynamic>.from(p);
+        }
+        debugPrint('🔍 [DELIVERY] Fetched ${profiles.length} profiles');
+      } catch (e) {
+        debugPrint('🔍 [DELIVERY] Error fetching profiles: $e');
+      }
+    }
+
+    // Fetch subscriptions for orders that have subscription_id
+    final subscriptionIds = orders
+        .map((o) => o['subscription_id'] as String?)
+        .where((id) => id != null)
+        .toSet()
+        .toList();
+    
+    Map<String, Map<String, dynamic>> subscriptionsMap = {};
+    if (subscriptionIds.isNotEmpty) {
+      try {
+        final subs = await SupabaseService.client
+            .from('subscriptions')
+            .select('*, products (id, name, unit, image_url)')
+            .inFilter('id', subscriptionIds);
+        for (final s in subs) {
+          subscriptionsMap[s['id'] as String] = Map<String, dynamic>.from(s);
+        }
+        debugPrint('🔍 [DELIVERY] Fetched ${subs.length} subscriptions');
+      } catch (e) {
+        debugPrint('🔍 [DELIVERY] Error fetching subscriptions: $e');
+      }
+    }
+
+    // Build orders map with nested data
     final ordersMap = <String, Map<String, dynamic>>{};
     for (final order in orders) {
-      ordersMap[order['id'] as String] = Map<String, dynamic>.from(order);
+      final orderMap = Map<String, dynamic>.from(order);
+      final userId = order['user_id'] as String?;
+      final subId = order['subscription_id'] as String?;
+      
+      // Attach profile data
+      if (userId != null && profilesMap.containsKey(userId)) {
+        orderMap['profiles'] = profilesMap[userId];
+      }
+      // Attach subscription data
+      if (subId != null && subscriptionsMap.containsKey(subId)) {
+        orderMap['subscriptions'] = subscriptionsMap[subId];
+      }
+      
+      ordersMap[order['id'] as String] = orderMap;
     }
 
     // Merge orders into deliveries
@@ -100,9 +190,12 @@ Future<List<Map<String, dynamic>>> _fetchDeliveriesForDate(
       result.add(merged);
     }
 
+    debugPrint('🔍 [DELIVERY] Returning ${result.length} merged deliveries');
     return result;
     
   } catch (e, stack) {
+    debugPrint('❌ [DELIVERY] FATAL ERROR in _fetchDeliveriesForDate: $e');
+    debugPrint('Stack: $stack');
     return [];
   }
 }
@@ -112,20 +205,25 @@ final todayDeliveriesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final personId = await ref.watch(deliveryPersonIdProvider.future);
 
+
   if (personId == null) {
+
     return [];
   }
 
   final today = DateTime.now();
   final todayStr = _formatDateForQuery(today);
 
+
   try {
     final todayDeliveries = await _fetchDeliveriesForDate(personId, todayStr);
+
     if (todayDeliveries.isNotEmpty) {
       return todayDeliveries;
     }
 
     // No deliveries found for today, check next available date
+
     final nextDateResult = await SupabaseService.client
         .from('deliveries')
         .select('scheduled_date')
@@ -134,12 +232,15 @@ final todayDeliveriesProvider =
         .order('scheduled_date')
         .limit(1);
 
+
     if (nextDateResult.isEmpty) {
+
       return [];
     }
 
     final nextDateStr =
         _normalizeDateValue(nextDateResult.first['scheduled_date']);
+
     
     if (nextDateStr.isEmpty) {
       return [];
@@ -147,6 +248,7 @@ final todayDeliveriesProvider =
 
     return _fetchDeliveriesForDate(personId, nextDateStr);
   } catch (e, stack) {
+
     return [];
   }
 });
@@ -242,6 +344,7 @@ class _DeliveryDashboardScreenState
                                 ),
                               ),
                               const SizedBox(width: 8),
+
                               IconButton.filledTonal(
                                 onPressed: () => _showAdminSupportDialog(context),
                                 icon: Icon(Icons.support_agent,
@@ -309,6 +412,7 @@ class _DeliveryDashboardScreenState
                   ),
                 ),
               ),
+
               // Content Section
               SliverPadding(
                 padding: const EdgeInsets.all(20),
@@ -318,6 +422,17 @@ class _DeliveryDashboardScreenState
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(child: Text('Error: $e')),
                     data: (deliveries) {
+                      // Split deliveries by order type
+                      final milkDeliveries = deliveries.where((d) {
+                        final order = d['orders'] as Map<String, dynamic>?;
+                        return order?['order_type'] != 'one_time';
+                      }).toList();
+                      
+                      final shopOrders = deliveries.where((d) {
+                        final order = d['orders'] as Map<String, dynamic>?;
+                        return order?['order_type'] == 'one_time';
+                      }).toList();
+
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -350,7 +465,7 @@ class _DeliveryDashboardScreenState
                           ),
                           const SizedBox(height: 16),
 
-                          // Delivery Cards
+                          // Empty State
                           if (deliveries.isEmpty)
                             Card(
                               child: Padding(
@@ -371,10 +486,91 @@ class _DeliveryDashboardScreenState
                                   ],
                                 ),
                               ),
-                            )
-                          else
-                            ...deliveries.map((delivery) =>
+                            ),
+
+                          // Shop Orders Section (if any)
+                          if (shopOrders.isNotEmpty) ...[
+                            Row(
+                              children: [
+                                Icon(Icons.shopping_bag, size: 18, color: Colors.orange.shade700),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Shop Orders',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${shopOrders.length}',
+                                    style: TextStyle(
+                                      color: Colors.orange.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ...shopOrders.map((delivery) {
+                              // Extract address safely
+                              final order = delivery['orders'] as Map<String, dynamic>?;
+                              final profile = order?['profiles'] as Map<String, dynamic>?;
+                              final address = profile?['address'] as String? ?? '';
+
+                              return ShopOrderCard(
+                                delivery: delivery,
+                                onMarkDelivered: () => _markShopOrderDelivered(delivery),
+                                onReportIssue: () => _handleReportIssue(delivery),
+                                onNavigate: address.isNotEmpty ? () => _openMaps(address) : null,
+                              );
+                            }),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Milk Deliveries Section (if any)
+                          if (milkDeliveries.isNotEmpty) ...[
+                            Row(
+                              children: [
+                                Icon(Icons.local_drink, size: 18, color: colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Milk Subscriptions',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${milkDeliveries.length}',
+                                    style: TextStyle(
+                                      color: colorScheme.onPrimaryContainer,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ...milkDeliveries.map((delivery) =>
                                 _buildDeliveryCard(context, delivery)),
+                          ],
                         ],
                       );
                     },
@@ -479,6 +675,77 @@ class _DeliveryDashboardScreenState
     );
   }
 
+  void _showDebugDialog(BuildContext context, WidgetRef ref) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final personId = await ref.read(deliveryPersonIdProvider.future);
+      final today = DateTime.now();
+      final dateStr = _formatDateForQuery(today);
+
+      final deliveries = await SupabaseService.client
+          .from('deliveries')
+          .select()
+          .eq('delivery_person_id', personId ?? '')
+          .eq('scheduled_date', dateStr);
+
+      final allDeliveries = await SupabaseService.client
+          .from('deliveries')
+          .select()
+          .eq('scheduled_date', dateStr);
+
+      if (context.mounted) {
+        Navigator.pop(context); // Pop loading
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Debug Data'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Person ID: $personId'),
+                  Text('Date: $dateStr'),
+                  const Divider(),
+                  Text('Assigned Deliveries (${deliveries.length}):'),
+                  Text(deliveries.toString()),
+                  const Divider(),
+                  Text('ALL Deliveries Today (${allDeliveries.length}):'),
+                  Text(allDeliveries.map((d) => "Order: ${d['order_id']}, Person: ${d['delivery_person_id']}").join('\n')),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: deliveries.toString()));
+                  Navigator.pop(context);
+                },
+                child: const Text('Copy & Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Error'),
+            content: Text(e.toString()),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildSummaryCard(
     BuildContext context, {
     required IconData icon,
@@ -526,15 +793,29 @@ class _DeliveryDashboardScreenState
     final subscription = order?['subscriptions'] as Map<String, dynamic>?;
     final profile = order?['profiles'] as Map<String, dynamic>?;
     final product = subscription?['products'] as Map<String, dynamic>?;
+    final orderItems = order?['order_items'] as List<dynamic>?;
 
     // Extract values
     final customerName = profile?['full_name'] ?? 'Customer';
     final address = profile?['address'] ?? 'No address provided';
     final phone = profile?['phone'] ?? '';
-    final productName = product?['name'] ?? 'Milk';
+    
+    // Determine product name
+    String productName = 'Milk';
+    if (product != null) {
+      productName = product['name'];
+    } else if (orderItems != null && orderItems.isNotEmpty) {
+      if (orderItems.length == 1) {
+        final itemProduct = orderItems.first['products'];
+        productName = itemProduct != null ? itemProduct['name'] : 'Product';
+      } else {
+        productName = '${orderItems.length} Items';
+      }
+    }
+
     final unit = product?['unit'] ?? 'L';
     final quantity = subscription?['quantity'] ?? 1;
-    final deliverySlot = subscription?['delivery_slot'] ?? 'morning';
+    final deliverySlot = subscription?['delivery_slot'] ?? subscription?['time_slot'] ?? 'morning';
     final isMorning = deliverySlot == 'morning';
 
     return Card(
@@ -598,6 +879,20 @@ class _DeliveryDashboardScreenState
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
+                      // For Shop Orders, show items summary here
+                      if (orderItems != null && orderItems.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                             orderItems.map((i) {
+                               final p = i['products'];
+                               return "${p?['name'] ?? 'Item'} x${i['quantity']}";
+                             }).join(', '),
+                             style: TextStyle(fontSize: 12, color: colorScheme.primary, fontWeight: FontWeight.w500),
+                             maxLines: 1,
+                             overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       const SizedBox(height: 2),
                       Row(
                         children: [
@@ -665,7 +960,7 @@ class _DeliveryDashboardScreenState
                   ),
                   // Product Name Badge
                   Container(
-                    constraints: const BoxConstraints(maxWidth: 120),
+                    constraints: const BoxConstraints(maxWidth: 160),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -675,14 +970,12 @@ class _DeliveryDashboardScreenState
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.local_drink,
+                        Icon(orderItems != null && orderItems.isNotEmpty ? Icons.shopping_bag : Icons.local_drink,
                             size: 12, color: Colors.purple.shade700),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            delivery['orders']?['subscriptions']?['products']
-                                    ?['name'] ??
-                                'Milk',
+                            productName,
                             style: TextStyle(
                               color: Colors.purple.shade700,
                               fontWeight: FontWeight.w600,
@@ -831,7 +1124,7 @@ class _DeliveryDashboardScreenState
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => _reportIssue(delivery),
+                          onPressed: () => _handleReportIssue(delivery),
                           icon: const Icon(Icons.warning_amber, size: 18),
                           label: const Text('Issue'),
                           style: OutlinedButton.styleFrom(
@@ -1320,6 +1613,80 @@ class _DeliveryDashboardScreenState
             SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Mark a shop order as delivered (no scanner required)
+  void _markShopOrderDelivered(Map<String, dynamic> delivery) async {
+    final deliveryId = delivery['id'] as String;
+    final order = delivery['orders'] as Map<String, dynamic>?;
+    final orderId = order?['id'] as String?;
+
+    try {
+      // Update delivery status
+      await SupabaseService.client
+          .from('deliveries')
+          .update({
+            'status': 'delivered',
+            'delivered_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', deliveryId);
+
+      // Update order status
+      if (orderId != null) {
+        await SupabaseService.client
+            .from('orders')
+            .update({'status': 'delivered'})
+            .eq('id', orderId);
+      }
+
+      // Refresh the list
+      ref.invalidate(todayDeliveriesProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order marked as delivered!'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+
+
+  /// Report an issue with a delivery
+  void _handleReportIssue(Map<String, dynamic> delivery) {
+    final deliveryId = delivery['id'] as String;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Issue'),
+        content: const Text('Contact admin to report issues with this delivery.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showAdminSupportDialog(context);
+            },
+            child: const Text('Contact Admin'),
+          ),
+        ],
       ),
     );
   }

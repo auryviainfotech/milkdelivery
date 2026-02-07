@@ -20,6 +20,9 @@ _$OrderModelImpl _$$OrderModelImplFromJson(Map<String, dynamic> json) =>
       paymentMethod: json['payment_method'] as String?,
       totalAmount: (json['total_amount'] as num?)?.toDouble(),
       orderType: json['order_type'] as String?,
+      items: (json['order_items'] as List<dynamic>?)
+          ?.map((e) => OrderItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
 
 Map<String, dynamic> _$$OrderModelImplToJson(_$OrderModelImpl instance) =>
@@ -33,6 +36,7 @@ Map<String, dynamic> _$$OrderModelImplToJson(_$OrderModelImpl instance) =>
       'payment_method': instance.paymentMethod,
       'total_amount': instance.totalAmount,
       'order_type': instance.orderType,
+      'order_items': instance.items,
     };
 
 const _$OrderStatusEnumMap = {
@@ -50,6 +54,9 @@ _$OrderItemImpl _$$OrderItemImplFromJson(Map<String, dynamic> json) =>
       productId: json['product_id'] as String,
       quantity: (json['quantity'] as num).toInt(),
       price: (json['price'] as num).toDouble(),
+      product: json['products'] == null
+          ? null
+          : ProductModel.fromJson(json['products'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$$OrderItemImplToJson(_$OrderItemImpl instance) =>
@@ -59,6 +66,7 @@ Map<String, dynamic> _$$OrderItemImplToJson(_$OrderItemImpl instance) =>
       'product_id': instance.productId,
       'quantity': instance.quantity,
       'price': instance.price,
+      'products': instance.product,
     };
 
 _$DeliveryModelImpl _$$DeliveryModelImplFromJson(Map<String, dynamic> json) =>

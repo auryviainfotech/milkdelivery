@@ -334,6 +334,13 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
           ),
         ),
         actions: [
+          // Delete button
+          TextButton.icon(
+            onPressed: () => _confirmDeleteSubscription(dialogContext, sub['id'], profile?['full_name'] ?? 'Unknown'),
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            label: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+          const Spacer(),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
@@ -387,6 +394,58 @@ class _SubscriptionsScreenState extends ConsumerState<SubscriptionsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteSubscription(BuildContext dialogContext, String subscriptionId, String customerName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Subscription?'),
+        content: Text('Are you sure you want to delete the subscription for "$customerName"?\n\nThis action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed != true) return;
+    
+    try {
+      await SupabaseService.client
+          .from('subscriptions')
+          .delete()
+          .eq('id', subscriptionId);
+      
+      // Close details dialog
+      if (dialogContext.mounted) {
+        Navigator.pop(dialogContext);
+      }
+      
+      // Refresh and show success
+      if (mounted) {
+        ref.invalidate(subscriptionsProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Subscription deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting: $e'), backgroundColor: Colors.red),
         );
       }
     }

@@ -37,9 +37,7 @@ final oneTimeProductsProvider = FutureProvider<List<ProductModel>>((ref) async {
   final response = await SupabaseService.client
       .from('products')
       .select()
-      .eq('is_active', true)
-      .eq('category', 'one_time')  // Only one-time products
-      .order('name');
+      .order('name'); // Fetch ALL products to allow buying Milk in Shop
   
   return (response as List)
       .map((json) => ProductModel.fromJson(json))
@@ -56,10 +54,15 @@ final ordersProvider = FutureProvider<List<OrderModel>>((ref) async {
   }
   
   try {
+    // Filter to show last 3 days of orders
+    final threeDaysAgo = DateTime.now().subtract(const Duration(days: 3));
+    final dateStr = threeDaysAgo.toIso8601String().split('T')[0];
+    
     final response = await SupabaseService.client
         .from('orders')
-        .select()
+        .select('*, order_items(*, products(*))')
         .eq('user_id', user.id)
+        .gte('delivery_date', dateStr)
         .order('delivery_date', ascending: false);
     
     debugPrint('🔍 [ORDERS] Raw response count: ${(response as List).length}');
@@ -104,18 +107,43 @@ final activeSubscriptionsProvider = FutureProvider<List<SubscriptionModel>>((ref
 /// Used in Orders screen to show subscription status
 final allSubscriptionsProvider = FutureProvider<List<SubscriptionModel>>((ref) async {
   final user = SupabaseService.currentUser;
-  if (user == null) return [];
+  debugPrint('[allSubscriptionsProvider] Current user: ${user?.id}');
+  if (user == null) {
+    debugPrint('[allSubscriptionsProvider] No user logged in!');
+    return [];
+  }
   
-  final response = await SupabaseService.client
-      .from('subscriptions')
-      .select()
-      .eq('user_id', user.id)
-      .filter('status', 'in', '("active","pending")')
-      .order('created_at', ascending: false);
-  
-  return (response as List)
-      .map((json) => SubscriptionModel.fromJson(json))
-      .toList();
+  try {
+    // Fetch all subscriptions for user, then filter in Dart
+    // This avoids complex Supabase filter syntax issues
+    final response = await SupabaseService.client
+        .from('subscriptions')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at', ascending: false);
+    
+    debugPrint('[allSubscriptionsProvider] Raw response: $response');
+    
+    final allSubs = (response as List)
+        .map((json) => SubscriptionModel.fromJson(json))
+        .toList();
+    
+    debugPrint('[allSubscriptionsProvider] All subs for user: ${allSubs.length}');
+    
+    // Filter to only active and pending
+    final filtered = allSubs.where((s) => 
+        s.status == SubscriptionStatus.active || 
+        s.status == SubscriptionStatus.pending
+    ).toList();
+    
+    debugPrint('[allSubscriptionsProvider] After filtering (active/pending): ${filtered.length}');
+    
+    return filtered;
+  } catch (e, stack) {
+    debugPrint('[allSubscriptionsProvider] ERROR: $e');
+    debugPrint('[allSubscriptionsProvider] Stack: $stack');
+    rethrow;
+  }
 });
 
 /// Provider for a specific order's details
@@ -186,13 +214,19 @@ final userProfileStatsProvider = FutureProvider<Map<String, dynamic>>((ref) asyn
   }
 
   try {
-    // Count delivered orders
-    final deliveriesResponse = await SupabaseService.client
+    // Count delivered orders (delivered OR payment_pending)
+    // We fetch all orders for the user and filter in Dart to handle OR condition easily
+    final ordersResponse = await SupabaseService.client
         .from('orders')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('status', 'delivered');
-    final deliveriesCount = (deliveriesResponse as List).length;
+        .select('status, total_amount')
+        .eq('user_id', user.id);
+    
+    final allOrders = (ordersResponse as List);
+    final deliveredOrders = allOrders.where((o) => 
+        o['status'] == 'delivered' || o['status'] == 'payment_pending'
+    ).toList();
+    
+    final deliveriesCount = deliveredOrders.length;
 
     // Calculate months subscribed (based on oldest active subscription)
     final subsResponse = await SupabaseService.client
@@ -212,27 +246,26 @@ final userProfileStatsProvider = FutureProvider<Map<String, dynamic>>((ref) asyn
       }
     }
 
-    // Calculate total savings (assume 10% savings vs market price)
-    // This is based on total amount from delivered orders
-    final ordersResponse = await SupabaseService.client
-        .from('orders')
-        .select('total_amount')
-        .eq('user_id', user.id)
-        .eq('status', 'delivered');
-    
-    double totalSpent = 0;
-    for (final order in (ordersResponse as List)) {
-      totalSpent += (order['total_amount'] ?? 0).toDouble();
-    }
-    // Assume 10% savings (market price would be ~11% higher)
-    final savings = totalSpent * 0.10;
-
     return {
       'deliveries': deliveriesCount,
       'months': monthsSubscribed,
-      'savings': savings,
+      'savings': 0.0, // Deprecated, but keeping structure for safety
     };
   } catch (e) {
+    debugPrint('Error fetching profile stats: $e');
     return {'deliveries': 0, 'months': 0, 'savings': 0.0};
   }
+});
+
+/// Provider for user quota data (liters remaining + status)
+final userQuotaProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final user = SupabaseService.currentUser;
+  if (user == null) return null;
+  
+  final response = await SupabaseService.client
+      .from('profiles')
+      .select('liters_remaining, subscription_status, full_name, phone, qr_code')
+      .eq('id', user.id)
+      .maybeSingle();
+  return response;
 });

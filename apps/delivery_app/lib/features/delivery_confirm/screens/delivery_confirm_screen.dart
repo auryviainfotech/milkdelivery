@@ -25,11 +25,14 @@ final deliveryDetailProvider = FutureProvider.family<Map<String, dynamic>?, Stri
             payment_method,
             order_type,
             subscriptions (
-              delivery_slot,
-              quantity,
+              *,
               products (name, unit, image_url)
             ),
-            profiles (full_name, phone, address)
+            profiles (full_name, phone, address),
+            order_items (
+              id, product_id, quantity, price,
+              products (id, name, unit, image_url, emoji)
+            )
           )
         ''')
         .eq('id', deliveryId)
@@ -391,6 +394,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
   void _showPhotoUploadDialog(BuildContext context, Map<String, dynamic> delivery, WidgetRef ref) {
     File? selectedImage;
     bool isUploading = false;
+    final litersController = TextEditingController(text: '1.0');
     
     showDialog(
       context: context,
@@ -404,7 +408,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Upload Photo',
+                  'Upload Photo & Deliver',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -418,12 +422,38 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                   'Take a photo of the delivered milk as proof of delivery.',
                   style: TextStyle(fontSize: 14),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                
+                // Liters input field
+                TextField(
+                  controller: litersController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: 'Liters to Deduct',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.water_drop),
+                    suffixText: 'L',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [0.5, 1.0, 1.5, 2.0].map((liters) {
+                    return ActionChip(
+                      label: Text('$liters L'),
+                      onPressed: () {
+                        litersController.text = liters.toString();
+                        setDialogState(() {});
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
                 
                 // Image preview or placeholder
                 Container(
                   width: double.infinity,
-                  height: 200,
+                  height: 180,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
@@ -505,11 +535,78 @@ class DeliveryConfirmScreen extends ConsumerWidget {
             ),
             FilledButton(
               onPressed: (selectedImage == null || isUploading) ? null : () async {
+                final liters = double.tryParse(litersController.text) ?? 0;
+                if (liters <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter valid liters'), backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+                
                 setDialogState(() => isUploading = true);
                 
                 try {
-                  // For now, we'll just mark delivery as complete with photo confirmation
-                  // Photo can be stored locally or uploaded to storage bucket later
+                  // Get customer ID from order
+                  final order = delivery['orders'] as Map<String, dynamic>?;
+                  final customerId = order?['user_id'] as String?;
+                  
+                  if (customerId != null) {
+                    // Get customer's current liters
+                    final profile = await SupabaseService.client
+                        .from('profiles')
+                        .select('liters_remaining, full_name')
+                        .eq('id', customerId)
+                        .single();
+                    
+                    final currentLiters = (profile['liters_remaining'] as num?)?.toDouble() ?? 0.0;
+                    final customerName = profile['full_name'] ?? 'Customer';
+                    
+                    // Check for insufficient balance
+                    if (currentLiters < liters) {
+                      final proceed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Insufficient Balance'),
+                          content: Text(
+                            '$customerName only has ${currentLiters.toStringAsFixed(1)}L remaining.\n'
+                            'You are trying to deliver ${liters}L.\n\n'
+                            'Proceed with negative balance (Overdraft)?'
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                              child: const Text('Allow Overdraft'),
+                            ),
+                          ],
+                        ),
+                      );
+                      
+                      if (proceed != true) {
+                        setDialogState(() => isUploading = false);
+                        return;
+                      }
+                    }
+                    
+                    // Deduct liters from customer
+                    await SupabaseService.client
+                        .from('profiles')
+                        .update({'liters_remaining': currentLiters - liters})
+                        .eq('id', customerId);
+                    
+                    // Send notification to customer
+                    final newLitersRemaining = currentLiters - liters;
+                    await SupabaseService.client.from('notifications').insert({
+                      'user_id': customerId,
+                      'title': '🥛 Delivery Complete!',
+                      'body': 'Milk (${liters.toStringAsFixed(1)}L) delivered. You have ${newLitersRemaining.toStringAsFixed(1)}L remaining.',
+                      'type': 'deliveryUpdate',
+                    });
+                  }
                   
                   // Update orders table
                   await SupabaseService.client
@@ -517,18 +614,18 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                       .update({'status': 'delivered'})
                       .eq('id', delivery['order_id']);
                   
-                  // Update deliveries table with photo confirmation note
+                  // Update deliveries table with photo confirmation
                   await SupabaseService.client
                       .from('deliveries')
                       .update({
                         'status': 'delivered',
                         'delivered_at': DateTime.now().toIso8601String(),
+                        'liters_delivered': liters,
                         'issue_notes': 'Delivered with photo confirmation (QR not scanned)',
                       })
                       .eq('id', delivery['id']);
                   
                   // Invalidate providers to refresh dashboard data
-                  final String orderId = delivery['order_id'] as String;
                   ref.invalidate(todayDeliveriesProvider);
                   ref.invalidate(deliveryDetailProvider(orderId));
                   
@@ -539,8 +636,8 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                   if (context.mounted) {
                     context.go('/dashboard');
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✓ Delivery confirmed with photo!'),
+                      SnackBar(
+                        content: Text('✓ Delivered ${liters.toStringAsFixed(1)}L with photo!'),
                         backgroundColor: AppTheme.successColor,
                       ),
                     );
@@ -566,7 +663,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
                         color: Colors.white,
                       ),
                     )
-                  : const Text('Confirm Delivery'),
+                  : const Text('Confirm & Deduct'),
             ),
           ],
         ),
@@ -584,7 +681,7 @@ class DeliveryConfirmScreen extends ConsumerWidget {
     final productName = product?['name'] ?? 'Milk';
     final unit = product?['unit'] ?? 'L';
     final quantity = subscription?['quantity'] ?? 1;
-    final deliverySlot = subscription?['delivery_slot'] ?? 'morning';
+    final deliverySlot = subscription?['delivery_slot'] ?? subscription?['time_slot'] ?? 'morning';
     final imageUrl = product?['image_url'] as String?;
     final description = product?['description'] as String?;
     final category = product?['category'] as String?;

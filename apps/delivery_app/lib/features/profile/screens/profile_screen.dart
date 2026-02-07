@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../dashboard/screens/delivery_dashboard_screen.dart';
+import '../../../app/providers/theme_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -13,6 +14,9 @@ class ProfileScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final profileAsync = ref.watch(deliveryProfileProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isDarkMode = themeMode == ThemeMode.dark || 
+        (themeMode == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 
     return Scaffold(
       appBar: AppBar(
@@ -90,15 +94,13 @@ class ProfileScreen extends ConsumerWidget {
               Card(
                 child: Column(
                   children: [
+
                     SwitchListTile(
                       secondary: const Icon(Icons.dark_mode),
                       title: const Text('Dark Mode'),
-                      value: false, // TODO: Implement theme provider
+                      value: isDarkMode,
                       onChanged: (value) {
-                         // Placeholder for theme toggle
-                         ScaffoldMessenger.of(context).showSnackBar(
-                           const SnackBar(content: Text('Theme toggle coming soon!')),
-                         );
+                        ref.read(themeModeProvider.notifier).toggleTheme(value);
                       },
                     ),
                     const Divider(height: 1),

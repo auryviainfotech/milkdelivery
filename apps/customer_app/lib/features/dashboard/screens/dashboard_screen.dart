@@ -7,17 +7,7 @@ import '../../../shared/providers/auth_providers.dart';
 import 'package:milk_core/milk_core.dart';
 
 /// Provider for user quota data (liters remaining + status)
-final userQuotaProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final user = SupabaseService.currentUser;
-  if (user == null) return null;
-  
-  final response = await SupabaseService.client
-      .from('profiles')
-      .select('liters_remaining, subscription_status, full_name, phone, qr_code')
-      .eq('id', user.id)
-      .maybeSingle();
-  return response;
-});
+
 
 /// Customer Dashboard Screen - Modern Liters Quota Design
 class DashboardScreen extends ConsumerWidget {
@@ -507,7 +497,28 @@ class DashboardScreen extends ConsumerWidget {
         
         return Column(
           children: orders.take(3).map((order) {
-            final isDelivered = order.status == OrderStatus.delivered;
+            // Determine status properties
+            final isDelivered = order.status == OrderStatus.delivered || order.status == OrderStatus.paymentPending;
+            final isFailed = order.status == OrderStatus.failed;
+            
+            Color statusColor;
+            String statusText;
+            IconData statusIcon;
+            
+            if (isDelivered) {
+              statusColor = Colors.green;
+              statusText = 'Delivered';
+              statusIcon = Icons.check_circle;
+            } else if (isFailed) {
+              statusColor = Colors.red;
+              statusText = 'Failed';
+              statusIcon = Icons.error_outline;
+            } else {
+              statusColor = Colors.orange;
+              statusText = 'Pending';
+              statusIcon = Icons.schedule;
+            }
+
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
@@ -522,12 +533,12 @@ class DashboardScreen extends ConsumerWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: isDelivered ? Colors.green.shade50 : Colors.orange.shade50,
+                      color: statusColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      isDelivered ? Icons.check_circle : Icons.schedule,
-                      color: isDelivered ? Colors.green : Colors.orange,
+                      statusIcon,
+                      color: statusColor,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -535,7 +546,7 @@ class DashboardScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Milk Delivery', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        const Text('Milk Delivery', style: TextStyle(fontWeight: FontWeight.w600)),
                         Text(
                           DateFormat('d MMM, h:mm a').format(order.deliveryDate),
                           style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
@@ -546,15 +557,15 @@ class DashboardScreen extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDelivered ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                      color: statusColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      isDelivered ? 'Delivered' : 'Pending',
+                      statusText,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isDelivered ? Colors.green.shade700 : Colors.orange.shade700,
+                        color: statusColor,
                       ),
                     ),
                   ),

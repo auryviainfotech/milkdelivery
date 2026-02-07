@@ -98,331 +98,341 @@ class _AssignmentsScreenState extends ConsumerState<AssignmentsScreen> {
           const SizedBox(width: 16),
         ],
       ),
-      body: Row(
-        children: [
-          // Left panel - Delivery Persons with capacity
-          SizedBox(
-            width: 320,
-            child: Card(
-              margin: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Delivery Persons',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isSmallScreen = constraints.maxWidth < 800;
+          
+          if (isSmallScreen) {
+            // Stacked layout for small screens
+            return Column(
+              children: [
+                // Delivery Persons (collapsed to top section)
+                SizedBox(
+                  height: 200,
+                  child: Card(
+                    margin: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            'Delivery Persons',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: _buildDeliveryPersonsList(deliveryPersonsAsync, customerCountAsync, colorScheme),
+                        ),
+                      ],
                     ),
                   ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: deliveryPersonsAsync.when(
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('Error: $e')),
-                      data: (deliveryPersons) => customerCountAsync.when(
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => Center(child: Text('Error: $e')),
-                        data: (counts) => ListView.builder(
-                          itemCount: deliveryPersons.length,
-                          itemBuilder: (context, index) {
-                            final dp = deliveryPersons[index];
-                            final count = counts[dp['id']] ?? 0;
-                            final isFull = count >= maxCapacity;
-
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: isFull
-                                    ? Colors.red.shade100
-                                    : colorScheme.primaryContainer,
-                                child: Icon(
-                                  Icons.delivery_dining,
-                                  color:
-                                      isFull ? Colors.red : colorScheme.primary,
-                                ),
+                ),
+                // Customer list (expanded)
+                Expanded(
+                  child: _buildCustomerList(customersAsync, deliveryPersonsAsync, customerCountAsync, colorScheme),
+                ),
+              ],
+            );
+          }
+          
+          // Wide screen layout
+          return Row(
+            children: [
+              // Left panel - Delivery Persons with capacity
+              SizedBox(
+                width: 320,
+                child: Card(
+                  margin: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'Delivery Persons',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
                               ),
-                              title: Text(dp['full_name'] ?? 'Unknown'),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(dp['phone'] ?? ''),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: LinearProgressIndicator(
-                                          value: count / maxCapacity,
-                                          backgroundColor: Colors.grey.shade200,
-                                          color: isFull
-                                              ? Colors.red
-                                              : colorScheme.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '$count/$maxCapacity',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: isFull ? Colors.red : null,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              isThreeLine: true,
-                            );
-                          },
                         ),
                       ),
-                    ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: _buildDeliveryPersonsList(deliveryPersonsAsync, customerCountAsync, colorScheme),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+              // Right panel - Customer list
+              Expanded(
+                child: _buildCustomerList(customersAsync, deliveryPersonsAsync, customerCountAsync, colorScheme),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-          // Right panel - Customer list
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+  Widget _buildDeliveryPersonsList(
+    AsyncValue<List<Map<String, dynamic>>> deliveryPersonsAsync,
+    AsyncValue<Map<String, int>> customerCountAsync,
+    ColorScheme colorScheme,
+  ) {
+    return deliveryPersonsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (deliveryPersons) => customerCountAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (counts) => ListView.builder(
+          itemCount: deliveryPersons.length,
+          itemBuilder: (context, index) {
+            final dp = deliveryPersons[index];
+            final count = counts[dp['id']] ?? 0;
+            final isFull = count >= maxCapacity;
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: isFull
+                    ? Colors.red.shade100
+                    : colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.delivery_dining,
+                  color: isFull ? Colors.red : colorScheme.primary,
+                ),
+              ),
+              title: Text(dp['full_name'] ?? 'Unknown'),
+              subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Filter and search row
+                  Text(dp['phone'] ?? ''),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
-                      // Filter chips
-                      ChoiceChip(
-                        label: const Text('All'),
-                        selected: _filterStatus == 'all',
-                        onSelected: (_) =>
-                            setState(() => _filterStatus = 'all'),
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: count / maxCapacity,
+                          backgroundColor: Colors.grey.shade200,
+                          color: isFull ? Colors.red : colorScheme.primary,
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('Unassigned'),
-                        selected: _filterStatus == 'unassigned',
-                        onSelected: (_) =>
-                            setState(() => _filterStatus = 'unassigned'),
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('Assigned'),
-                        selected: _filterStatus == 'assigned',
-                        onSelected: (_) =>
-                            setState(() => _filterStatus = 'assigned'),
-                      ),
-                      const Spacer(),
-                      // Search
-                      SizedBox(
-                        width: 250,
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search customers...',
-                            prefixIcon: const Icon(Icons.search),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 16),
-                          ),
-                          onChanged: (v) =>
-                              setState(() => _searchQuery = v.toLowerCase()),
+                      Text(
+                        '$count/$maxCapacity',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isFull ? Colors.red : null,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ],
+              ),
+              isThreeLine: true,
+            );
+          },
+        ),
+      ),
+    );
+  }
 
-                  // Customer list
-                  Expanded(
-                    child: customersAsync.when(
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('Error: $e')),
-                      data: (customers) {
-                        // Apply filters
-                        var filtered = customers.where((c) {
-                          final hasAssignment =
-                              c['assigned_delivery_person'] != null;
-                          if (_filterStatus == 'assigned' && !hasAssignment)
-                            return false;
-                          if (_filterStatus == 'unassigned' && hasAssignment)
-                            return false;
+  Widget _buildCustomerList(
+    AsyncValue<List<Map<String, dynamic>>> customersAsync,
+    AsyncValue<List<Map<String, dynamic>>> deliveryPersonsAsync,
+    AsyncValue<Map<String, int>> customerCountAsync,
+    ColorScheme colorScheme,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Filter and search row - responsive
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: const Text('All'),
+                    selected: _filterStatus == 'all',
+                    onSelected: (_) => setState(() => _filterStatus = 'all'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Unassigned'),
+                    selected: _filterStatus == 'unassigned',
+                    onSelected: (_) => setState(() => _filterStatus = 'unassigned'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Assigned'),
+                    selected: _filterStatus == 'assigned',
+                    onSelected: (_) => setState(() => _filterStatus = 'assigned'),
+                  ),
+                ],
+              ),
+              SizedBox(
+                width: 250,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search customers...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
 
-                          if (_searchQuery.isNotEmpty) {
-                            final name =
-                                (c['full_name'] ?? '').toString().toLowerCase();
-                            final address =
-                                (c['address'] ?? '').toString().toLowerCase();
-                            final phone =
-                                (c['phone'] ?? '').toString().toLowerCase();
-                            if (!name.contains(_searchQuery) &&
-                                !address.contains(_searchQuery) &&
-                                !phone.contains(_searchQuery)) {
-                              return false;
-                            }
-                          }
-                          return true;
-                        }).toList();
+          // Customer list
+          Expanded(
+            child: customersAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (customers) {
+                var filtered = customers.where((c) {
+                  final hasAssignment = c['assigned_delivery_person'] != null;
+                  if (_filterStatus == 'assigned' && !hasAssignment) return false;
+                  if (_filterStatus == 'unassigned' && hasAssignment) return false;
 
-                        if (filtered.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                  if (_searchQuery.isNotEmpty) {
+                    final name = (c['full_name'] ?? '').toString().toLowerCase();
+                    final address = (c['address'] ?? '').toString().toLowerCase();
+                    final phone = (c['phone'] ?? '').toString().toLowerCase();
+                    if (!name.contains(_searchQuery) &&
+                        !address.contains(_searchQuery) &&
+                        !phone.contains(_searchQuery)) {
+                      return false;
+                    }
+                  }
+                  return true;
+                }).toList();
+
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.people_outline, size: 64, color: colorScheme.onSurfaceVariant),
+                        const SizedBox(height: 16),
+                        Text('No customers found', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  );
+                }
+
+                return deliveryPersonsAsync.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('Error: $e')),
+                  data: (deliveryPersons) => customerCountAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Error: $e')),
+                    data: (counts) => ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final customer = filtered[index];
+                        final assignedDP = customer['assigned_delivery_person'];
+                        final isAssigned = assignedDP != null;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          color: isAssigned ? null : Colors.orange.shade50,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: isAssigned ? colorScheme.primaryContainer : Colors.orange.shade100,
+                              child: Icon(
+                                isAssigned ? Icons.check : Icons.warning_amber,
+                                color: isAssigned ? colorScheme.primary : Colors.orange,
+                              ),
+                            ),
+                            title: Text(customer['full_name'] ?? 'Unknown'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.people_outline,
-                                    size: 64,
-                                    color: colorScheme.onSurfaceVariant),
-                                const SizedBox(height: 16),
-                                Text('No customers found',
-                                    style: TextStyle(
-                                        color: colorScheme.onSurfaceVariant)),
+                                Text(customer['phone'] ?? ''),
+                                Text(
+                                  customer['address'] ?? 'No address',
+                                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (isAssigned)
+                                  Chip(
+                                    label: Text('📦 ${assignedDP['full_name']}', style: const TextStyle(fontSize: 12)),
+                                    backgroundColor: colorScheme.primaryContainer,
+                                    padding: EdgeInsets.zero,
+                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
                               ],
                             ),
-                          );
-                        }
-
-                        return deliveryPersonsAsync.when(
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
-                          error: (e, _) => Center(child: Text('Error: $e')),
-                          data: (deliveryPersons) => customerCountAsync.when(
-                            loading: () => const Center(
-                                child: CircularProgressIndicator()),
-                            error: (e, _) => Center(child: Text('Error: $e')),
-                            data: (counts) => ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (context, index) {
-                                final customer = filtered[index];
-                                final assignedDP =
-                                    customer['assigned_delivery_person'];
-                                final isAssigned = assignedDP != null;
-
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  color:
-                                      isAssigned ? null : Colors.orange.shade50,
-                                  child: ListTile(
-                                    leading: CircleAvatar(
-                                      backgroundColor: isAssigned
-                                          ? colorScheme.primaryContainer
-                                          : Colors.orange.shade100,
-                                      child: Icon(
-                                        isAssigned
-                                            ? Icons.check
-                                            : Icons.warning_amber,
-                                        color: isAssigned
-                                            ? colorScheme.primary
-                                            : Colors.orange,
-                                      ),
-                                    ),
-                                    title: Text(
-                                        customer['full_name'] ?? 'Unknown'),
-                                    subtitle: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                            isThreeLine: true,
+                            trailing: SizedBox(
+                              width: isAssigned ? 100 : 110,
+                              child: isAssigned
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        Text(customer['phone'] ?? ''),
-                                        Text(
-                                          customer['address'] ?? 'No address',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: colorScheme.onSurfaceVariant,
+                                        IconButton(
+                                          onPressed: () => _showAssignmentDialog(
+                                            customer['id'],
+                                            customer['full_name'],
+                                            deliveryPersons,
+                                            counts,
+                                            assignedDP?['id'],
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                          icon: const Icon(Icons.edit, size: 20),
+                                          tooltip: 'Edit Assignment',
+                                          style: IconButton.styleFrom(
+                                            backgroundColor: colorScheme.primaryContainer,
+                                          ),
                                         ),
-                                        if (isAssigned)
-                                          Chip(
-                                            label: Text(
-                                              '📦 ${assignedDP['full_name']}',
-                                              style:
-                                                  const TextStyle(fontSize: 12),
-                                            ),
-                                            backgroundColor:
-                                                colorScheme.primaryContainer,
-                                            padding: EdgeInsets.zero,
-                                            materialTapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
+                                        IconButton(
+                                          onPressed: () => _confirmUnassign(
+                                            customer['id'],
+                                            customer['full_name'],
+                                            assignedDP?['full_name'],
                                           ),
+                                          icon: const Icon(Icons.person_remove, size: 20),
+                                          style: IconButton.styleFrom(
+                                            backgroundColor: Colors.red.shade50,
+                                            foregroundColor: Colors.red,
+                                          ),
+                                          tooltip: 'Unassign',
+                                        ),
                                       ],
+                                    )
+                                  : FilledButton.icon(
+                                      onPressed: () => _showAssignmentDialog(
+                                        customer['id'],
+                                        customer['full_name'],
+                                        deliveryPersons,
+                                        counts,
+                                        null,
+                                      ),
+                                      icon: const Icon(Icons.person_add, size: 18),
+                                      label: const Text('Assign'),
                                     ),
-                                    isThreeLine: true,
-                                    trailing: SizedBox(
-                                      width: isAssigned ? 100 : 110,
-                                      child: isAssigned
-                                          ? Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              mainAxisAlignment: MainAxisAlignment.end,
-                                              children: [
-                                                IconButton(
-                                                  onPressed: () =>
-                                                      _showAssignmentDialog(
-                                                    customer['id'],
-                                                    customer['full_name'],
-                                                    deliveryPersons,
-                                                    counts,
-                                                    assignedDP?['id'],
-                                                  ),
-                                                  icon: const Icon(Icons.edit,
-                                                      size: 20),
-                                                  tooltip: 'Edit Assignment',
-                                                  style: IconButton.styleFrom(
-                                                    backgroundColor:
-                                                        colorScheme.primaryContainer,
-                                                  ),
-                                                ),
-                                                IconButton(
-                                                  onPressed: () =>
-                                                      _confirmUnassign(
-                                                    customer['id'],
-                                                    customer['full_name'],
-                                                    assignedDP?['full_name'],
-                                                  ),
-                                                  icon: const Icon(
-                                                      Icons.person_remove,
-                                                      size: 20),
-                                                  style: IconButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.red.shade50,
-                                                    foregroundColor: Colors.red,
-                                                  ),
-                                                  tooltip: 'Unassign',
-                                                ),
-                                              ],
-                                            )
-                                          : FilledButton.icon(
-                                              onPressed: () =>
-                                                  _showAssignmentDialog(
-                                                customer['id'],
-                                                customer['full_name'],
-                                                deliveryPersons,
-                                                counts,
-                                                null,
-                                              ),
-                                              icon: const Icon(Icons.person_add,
-                                                  size: 18),
-                                              label: const Text('Assign'),
-                                            ),
-                                    ),
-                                  ),
-                                );
-                              },
                             ),
                           ),
                         );
                       },
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],

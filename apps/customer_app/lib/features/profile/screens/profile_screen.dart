@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../../../shared/providers/auth_providers.dart';
+import '../../../shared/providers/theme_provider.dart';
 import 'package:milk_core/milk_core.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -232,6 +233,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final colorScheme = theme.colorScheme;
     
     final profileAsync = ref.watch(userProfileProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isDarkMode = themeMode == ThemeMode.dark || 
+        (themeMode == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 
     return Scaffold(
       appBar: AppBar(
@@ -288,6 +292,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Consumer(
                 builder: (context, ref, _) {
                   final statsAsync = ref.watch(userProfileStatsProvider);
+                  final quotaAsync = ref.watch(userQuotaProvider);
+                  
+                  final litersRemaining = quotaAsync.value?['liters_remaining']?.toString() ?? '0.0';
+
                   return statsAsync.when(
                     loading: () => Row(
                       children: [
@@ -295,7 +303,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         const SizedBox(width: 12),
                         Expanded(child: _buildStatCard(context, icon: Icons.calendar_month, value: '...', label: 'Months')),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildStatCard(context, icon: Icons.savings, value: '...', label: 'Saved')),
+                        Expanded(child: _buildStatCard(context, icon: Icons.water_drop, value: '...', label: 'Liters Left')),
                       ],
                     ),
                     error: (_, __) => Row(
@@ -304,7 +312,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         const SizedBox(width: 12),
                         Expanded(child: _buildStatCard(context, icon: Icons.calendar_month, value: '0', label: 'Months')),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildStatCard(context, icon: Icons.savings, value: '₹0', label: 'Saved')),
+                        Expanded(child: _buildStatCard(context, icon: Icons.water_drop, value: '0.0', label: 'Liters Left')),
                       ],
                     ),
                     data: (stats) => Row(
@@ -330,9 +338,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         Expanded(
                           child: _buildStatCard(
                             context,
-                            icon: Icons.savings,
-                            value: '₹${((stats['savings'] ?? 0.0) as double).toStringAsFixed(0)}',
-                            label: 'Saved',
+                            icon: Icons.water_drop,
+                            value: litersRemaining,
+                            label: 'Liters Left',
                           ),
                         ),
                       ],
@@ -370,19 +378,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               subtitle: 'Manage notifications',
               onTap: () => context.push('/notifications'),
             ),
-            // Download QR Code - Always navigate, QrCodeScreen handles empty state
-            _buildMenuItem(
-              context,
-              icon: Icons.qr_code_2,
-              title: 'Download QR Code',
-              subtitle: profileAsync.when(
-                data: (profile) => profile?.qrCode != null && profile!.qrCode!.isNotEmpty
-                    ? 'View and save QR code'
-                    : 'View your QR code',
-                loading: () => 'Loading...',
-                error: (_, __) => 'Tap to view',
-              ),
-              onTap: () => context.push('/qr-code'),
+            SwitchListTile(
+              secondary: const Icon(Icons.dark_mode),
+              title: const Text('Dark Mode'),
+              value: isDarkMode,
+              onChanged: (value) {
+                ref.read(themeModeProvider.notifier).toggleTheme(value);
+              },
             ),
             _buildMenuItem(
               context,

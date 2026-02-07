@@ -83,6 +83,11 @@ class AdminShell extends StatelessWidget {
                 selectedIcon: Icon(Icons.assignment_ind),
                 label: Text('Assignments'),
               ),
+              const NavigationDrawerDestination(
+                icon: Icon(Icons.shopping_bag_outlined),
+                selectedIcon: Icon(Icons.shopping_bag),
+                label: Text('Shop Orders'),
+              ),
 
               const NavigationDrawerDestination(
                 icon: Icon(Icons.bar_chart_outlined),
@@ -125,7 +130,8 @@ class AdminShell extends StatelessWidget {
     if (location.startsWith('/subscriptions')) return 4;
     if (location.startsWith('/deliveries')) return 5;
     if (location.startsWith('/assignments')) return 6;
-    if (location.startsWith('/reports')) return 7;
+    if (location.startsWith('/shop-orders')) return 7;
+    if (location.startsWith('/reports')) return 8;
     return 0;
   }
 
@@ -138,6 +144,7 @@ class AdminShell extends StatelessWidget {
       '/subscriptions',
       '/deliveries',
       '/assignments',
+      '/shop-orders',
       '/reports',
     ];
     context.go(routes[index]);
